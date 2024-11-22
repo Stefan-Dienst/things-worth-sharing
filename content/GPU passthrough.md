@@ -1,5 +1,5 @@
 +++
-title = "How to do a GPU passthrough on Beelink SER 5 - Ryzen 7 5800H with Proxmox to Ubuntu VM"
+title = "How to do a GPU passthrough on Beelink SER 5 - Ryzen 7 5800H with Proxmox on Ubuntu VM"
 date = 2024-11-22
 +++
 
