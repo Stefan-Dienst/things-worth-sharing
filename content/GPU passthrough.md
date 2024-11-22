@@ -46,11 +46,9 @@ For my case I just copied the download link from: [https://ubuntu.com/download/d
 Afterwards I did some standard configuration.
 The only thing out of the ordinary was that I used OVMF for the BIOS.
 
-<div class="info-box">
-    OVMF stands for Open Virtual Machine Firmware, and it is an open-source implementation of the Unified Extensible Firmware Interface (UEFI) specification. 
-    UEFI is a modern firmware interface that replaces the traditional BIOS (Basic Input/Output System) found in older systems. 
-    UEFI offers several advantages over BIOS, including support for larger disk sizes, faster boot times, secure boot, and improved system management capabilities.
-</div>
+OVMF stands for Open Virtual Machine Firmware, and it is an open-source implementation of the Unified Extensible Firmware Interface (UEFI) specification. 
+UEFI is a modern firmware interface that replaces the traditional BIOS (Basic Input/Output System) found in older systems. 
+UEFI offers several advantages over BIOS, including support for larger disk sizes, faster boot times, secure boot, and improved system management capabilities.
 
 What I can recommend is to install ssh on the VM so that you can still access it without a GUI.
 ```
