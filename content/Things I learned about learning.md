@@ -1,4 +1,7 @@
-+++ title = "Things I learned about learning" date = 2025-01-07 +++
++++ 
+title = "Things I learned about learning" 
+date = 2025-01-07 
++++
 
 Learning has always been an ambivalent topic for me. 
 In school, it was cumbersome, and I didn’t find much joy in it. 
