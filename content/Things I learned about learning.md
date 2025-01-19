@@ -1,6 +1,6 @@
-+++ 
-title = "Things I learned about learning" 
-date = 2025-01-07 
++++
+title = "Things I learned about learning"
+date = 2025-01-19
 +++
 
 Learning has always been an ambivalent topic for me. 
@@ -68,7 +68,7 @@ To trust my system and make it durable I make daily automated backups to an exte
 With this, I have relatively recent versions of my notes on four devices at all times.
 
 Here is a graph view in the Obsidian app of some of my notes and how they connect with each other:
-![[Screenshot_20241229-005805.png]]
+{{ image(src="/images/graph-view-obsidian.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 450px") }}
 
 ## Learning is effort and is not supposed to be easy
 Learning differs significantly from merely being presented with knowledge. 
@@ -129,12 +129,27 @@ In practice this means that I try to recapitulate the gist of a note to myself, 
 This forces me to actively engage with the knowledge, always re-inventing it as described in the previous section.
 
 In action this looks like this:
-Each note I want to review using spaced repetition is assigned a due date for its next review.
-![[Screenshot_20241227-232448.png]]
-For every day I then have a list of notes to review.
-![[Screenshot_20241227-232422.png]]
-Depending on *how good I did* I rank the notes as either easy, good or hard, which sets the next due date to either later or earlier.
-![[Screenshot_20241227-232517.png]]
+
+<div style="display: flex; align-items: center; margin-bottom: 40px;">
+  <p style="flex: 1; margin-right: 20px;">
+    Each note I want to review using spaced repetition is assigned a due date for its next review.
+  </p>
+  {{ image(src="/images/spaced-repetition-1.png", alt="", style="border-radius: 0px; width: 300px;") }}
+</div>
+
+<div style="display: flex; align-items: center; margin-bottom: 20px;">
+  <p style="flex: 1; margin-right: 20px;">
+    For every day I then have a list of notes to review.
+  </p>
+  {{ image(src="/images/spaced-repetition-2.png", alt="", style="border-radius: 0px; width: 250px;") }}
+</div>
+
+<div style="display: flex; align-items: center;">
+  <p style="flex: 1; margin-right: 20px;">
+    Depending on "how good I did" I rank the notes as either easy, good or hard, which sets the next due date to either later or earlier.
+  </p>
+  {{ image(src="/images/spaced-repetition-3.png", alt="", style="border-radius: 0px; width: 300px;") }}
+</div>
 
 
 Doing multiple repetitions of anything I learned sounded daunting at first and I must admit that it still is tedious sometimes.
