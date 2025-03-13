@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://thingsworthsharing.dev/</loc>
+    </url>
+    <url>
+        <loc>https://thingsworthsharing.dev/gpu-passthrough/</loc>
+        <lastmod>2024-11-22</lastmod>
+    </url>
+    <url>
+        <loc>https://thingsworthsharing.dev/pages/about/</loc>
+    </url>
+    <url>
+        <loc>https://thingsworthsharing.dev/pages/archive/</loc>
+    </url>
+    <url>
+        <loc>https://thingsworthsharing.dev/things-i-learned-about-learning/</loc>
+        <lastmod>2025-01-19</lastmod>
+    </url>
+</urlset>

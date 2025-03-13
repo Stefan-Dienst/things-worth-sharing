@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Things worth sharing</title>
+    
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <meta name="robots" content="noodp"/>
+
+    <link rel="stylesheet" href="https://thingsworthsharing.dev/style.css">
+    <link rel="stylesheet" href="https://thingsworthsharing.dev/color/orange.css">
+
+        <link rel="stylesheet" href="https://thingsworthsharing.dev/color/background_dark.css">
+    
+    <link rel="stylesheet" href="https://thingsworthsharing.dev/font-hack-subset.css">
+
+    <meta name="description" content="">
+
+    <meta property="og:description" content="">
+    <meta property="og:title" content="Things worth sharing">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://thingsworthsharing.dev/gpu-passthrough/">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:description" content="">
+    <meta name="twitter:title" content="Things worth sharing">
+    <meta property="twitter:domain" content="thingsworthsharing.dev">
+    <meta property="twitter:url" content="https://thingsworthsharing.dev/gpu-passthrough/">
+
+    </head>
+
+<body class="">
+<div class="container">
+    
+    <header class="header">
+        <div class="header__inner">
+            <div class="header__logo">
+                    
+                <a href="https://thingsworthsharing.dev" style="text-decoration: none;">
+                    <div class="logo">
+                      
+                            Things worth sharing
+                        
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        
+        
+                <nav class="menu">
+            <ul class="menu__inner">
+                <li class="active"><a href="https://thingsworthsharing.dev">blog</a></li>
+            
+                <li><a href="https://thingsworthsharing.dev/pages/archive">archive</a></li>
+            
+                <li><a href="https://thingsworthsharing.dev/pages/about">about me</a></li>
+            
+                <li><a href="https://github.com/Stefan-Dienst" target="_blank" rel="noopener noreferrer">github</a></li>
+            </ul>
+        </nav>
+    
+    
+        
+    </header>
+    
+
+    <div class="content">
+        
+    <div class="post">
+        
+    <h1 class="post-title"><a href="https://thingsworthsharing.dev/gpu-passthrough/">How to do a GPU passthrough on Beelink SER 5 - Ryzen 7 5800H with Proxmox on Ubuntu VM</a></h1>
+    <div class="post-meta-inline">
+        
+    <span class="post-date">
+            2024-11-22
+        </span>
+
+    </div>
+
+    
+
+        <div class="post-content">
+            <p>After I installed Proxmox on my <a href="https://www.bee-link.com/en-de/products/beelink-ser5-max-5800h">Beelink SER 5 - Ryzen 7 5800H</a> I wanted to start an Ubuntu VM with GPU passthrough that I could use as a daily driver.
+As I had zero prior experience with doing something like this my process was full of following guides I barely understood, frustrating trial and error and reading about the things I just tried to do.
+This journal describes this process.
+It should not be seen as a complete guide, as I am far too inexperienced to verify if I did everything correctly.
+But maybe it helps someone like me who is lost and googling error messages.</p>
+<p>Before describing my journey I want to point out a few guides, with which I would not have been able to get it done:</p>
+<ul>
+<li><a href="https://forum.proxmox.com/threads/guide-ryzen-5800h-igpu-passthrough-hdmi-windows11-htpc.153405/">A guide that describes the process for the same machine I used but for a Windows VM</a>: This guide saved me. Before I found it I was close to giving up. So big shout outs.</li>
+<li><a href="https://github.com/isc30/ryzen-7000-series-proxmox/?tab=readme-ov-file#proxmox---ryzen-7000-series---amd-radeon-680m780mrdna2rdna3-gpu-passthrough">Comprehensive guide for Ryzen 7000 series GPU passthrough</a>: The guide above used this one for many steps.</li>
+<li><a href="https://nopresearcher.github.io/Proxmox-GPU-Passthrough-Ubuntu/">GPU passthrough to an Ubuntu VM, but with a NVIDIA GPU</a>: This was the first guide I started with and it got me on track. Unfortunately it did not work out of the box for me. (Probably because I also have a different GPU setup.)</li>
+</ul>
+<h1 id="my-journey">My journey</h1>
+<p>After I ran head first into following a guide and not getting results I decided to take a step back and first gather more information on what a GPU passthrough even is.
+I came up with the following description:</p>
+<h2 id="gpu-passthrough">GPU Passthrough</h2>
+<p>GPU Passthrough is a technique in virtualization and a form of PCI Passthrough, where the Graphics Processing Unit of the Hypervisor (for me Proxmox) host machine is directly assigned to a Virtual machine (VM).
+This way the VM can access the GPU as if it is directly connected to it.</p>
+<p>Normally a hypervisor provides virtual hardware to a VM and if this is done for a GPU one speaks of a virtual GPU (vGPU).
+Here multiple VMs can have access to a real physical one, but this way a single VM may not be able to use the full potential of the GPU.
+Additionally the hypervisor adds overhead to the communication leading to reduced performance.
+Now GPU Passthrough acts as a solution to this problem, by bypassing the virtualization layer, giving the VM near native performance of the GPU.</p>
+<h3 id="steps-to-enable-it">Steps to enable it</h3>
+<ol>
+<li><strong>Enable Input-Output Memory Management Unit (IOMMU)</strong>: IOMMU is necessary to isolate the GPU. It allows to map physical memory address to virtual ones and can therefore be used to restrict the access only to a single virtual machine.</li>
+<li><strong>Blacklist the host driver</strong>: By blacklisting the host Driver of the GPU the host machine will no longer be able to access the GPU. This way the <strong>Virtual Function IO (VFIO)</strong> will be able to take control over it without any timing issues due to interference of the host machine.</li>
+<li><strong>Bind the GPU to the Virtual Function IO</strong>: Here the VFIO acts as a driver that then has the control over the GPU and can give direct access to the VM. This way the host machine will no longer have access to it.</li>
+<li><strong>Assign the GPU to the VM</strong>: After the GPU is bound to the VFIO one can assign it to any VM.</li>
+<li><strong>Install the necessary driver on the VM</strong>: To ensure that the VM can actually use the assigned GPU the necessary driver need to be present.</li>
+</ol>
+<h2 id="naively-following-the-steps">Naively following the steps</h2>
+<h3 id="0-define-the-vm-that-you-want-to-launch">0. Define the VM that you want to launch</h3>
+<p>Here many guides exist like:</p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=5j0Zb6x_hOk">YouTube: Everything You Need to Know to Start with Proxmox VE</a></li>
+<li><a href="https://www.youtube.com/watch?v=VAJWUZ3sTSI">YouTube: Don’t run Proxmox without these settings!</a></li>
+</ul>
+<p>For my case I just copied the download link from: <a href="https://ubuntu.com/download/desktop">https://ubuntu.com/download/desktop</a> and then downloaded the image to the local storage.
+Afterwards I did some standard configuration.
+The only thing out of the ordinary was that I used OVMF for the BIOS.</p>
+<p>OVMF stands for Open Virtual Machine Firmware, and it is an open-source implementation of the Unified Extensible Firmware Interface (UEFI) specification.
+UEFI is a modern firmware interface that replaces the traditional BIOS (Basic Input/Output System) found in older systems.
+UEFI offers several advantages over BIOS, including support for larger disk sizes, faster boot times, secure boot, and improved system management capabilities.</p>
+<p>What I can recommend is to install ssh on the VM so that you can still access it without a GUI.</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>sudo apt update
+</span><span>sudo apt install openssh-server
+</span><span>sudo systemctl status ssh
+</span></code></pre>
+<h3 id="1-enable-input-output-memory-management-unit-iommu">1. Enable Input-Output Memory Management Unit (IOMMU)</h3>
+<p>The Input-Output Memory Management Unit (IOMMU) is a hardware features of modern CPUs that allows the Operating System (OS) to control how I/O devices access the memory.
+It acts as a form of gatekeeper and is therefore similar to how the Memory Management Unit handles the access of the CPU to the memory</p>
+<p>To enable it I needed to configure the Grand Unified Boot Loader (GRUB) of the host machine.
+In a normal boot process the GRUB is started by the BIOS and is responsible for loading the operating system.
+In my case with Proxmox it loads the Linux kernel.
+The way it behaves can be configured in the <code>/etc/default/grub</code> file, which can be edited with <code>sudo nano /etc/default/grub</code>.
+After an update the command <code>sudo update-grub</code> must be run to reload it.</p>
+<p>To enable the IMMOU I often read that one has to add <code>iommu=on</code> or in my case with an AMD CPU <code>amd_iommu=on</code>.
+In my trial and error process it turned out that I did not have to enable the IOMMU this way.
+Instead I only set <code>iommu=pt</code>, by changing the line <code>GRUB_CMDLINE_LINUX_DEFAULT="quite"</code> to <code>GRUB_CMDLINE_LINUX_DEFAULT="quite iommu=pt"</code>.
+As far as I know this should enable the passthrough mode in the IOMMU and enhance performance.</p>
+<h3 id="2-blacklist-the-host-driver">2. Blacklist the host driver</h3>
+<p>This step was rather straight forward.
+I just had to execute:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>echo &quot;blacklist amdgpu&quot; &gt;&gt; /etc/modprobe.d/blacklist.conf
+</span><span>echo &quot;blacklist radeon&quot; &gt;&gt; /etc/modprobe.d/blacklist.conf
+</span></code></pre>
+<p>This puts these two drivers in the blacklist, so they won't be automatically loaded in the boot process.</p>
+<p>If you wonder about the <code>modprobe</code> in the path, this stands for a Linux command that bears the same name.
+The command <code>modprobe</code> allows to load or unload a kernel module, in our case a driver.
+By using <code>modprobe &lt;module name&gt;</code> the specified module is loaded in the Linux kernel.
+This way the system can use the hardware that is specified by the module.
+By adding the flag <code>-r</code> the module is unloaded.</p>
+<h3 id="3-bind-the-gpu-to-the-virtual-function-io">3. Bind the GPU to the Virtual Function IO</h3>
+<p>To bind the GPU to the VFIO I first had to ensure that all necessary modules are loaded into the Linux kernel in the boot process.
+To do this I executed the following command:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">vfio</span><span>&quot; &gt;&gt; /etc/modules
+</span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">vfio_iommu_type1</span><span>&quot; &gt;&gt; /etc/modules
+</span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">vfio_pci</span><span>&quot; &gt;&gt; /etc/modules
+</span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">vfio_virqfd</span><span>&quot; &gt;&gt; /etc/modules
+</span></code></pre>
+<p>Afterwards I needed to identify the GPU, which can be done by using <code>lspci -v</code> and looking for a "VGA compatible controller".
+In my case:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>04:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] (rev c5) (prog-if 00 [VGA controller])
+</span><span>04:00.1 Audio device: Advanced Micro Devices, Inc. [AMD/ATI] Renoir Radeon High Definition Audio Controller
+</span></code></pre>
+<p>Here the first column is a combination of bus, device and function number.
+In my case <code>04:00.0</code>:</p>
+<ul>
+<li><code>04</code>: Bus number.</li>
+<li><code>00</code>: Device number.</li>
+<li><code>0</code>: Function number.</li>
+</ul>
+<p>This value can then be used to access further information by executing <code>lspci -n -s 04:00</code>, which yielded in my case:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>04:00.0 0300: 1002:1638 (rev c5)
+</span><span>04:00.1 0403: 1002:1637
+</span><span>04:00.2 1080: 1022:15df
+</span><span>04:00.3 0c03: 1022:1639
+</span><span>04:00.4 0c03: 1022:1639
+</span><span>04:00.5 0480: 1022:15e2 (rev 01)
+</span><span>04:00.6 0403: 1022:15e3
+</span></code></pre>
+<p>Here the second column is the class code in hexadecimal, which provides information about the type of device.
+The third column is the vendor and device id in the format <code>&lt;vendor-id&gt;:&lt;product-id&gt;</code>.
+In my case <code>1022</code> stands for AMD and e.g. <code>1638</code> uniquely identifies a specific model of device from the vendor.
+The last column is optional and is the Revision Id that indicates the specific version of a device.</p>
+<p>For binding the GPU the important part is the <code>&lt;vendor-id&gt;:&lt;product-id&gt;</code>.
+I used the top one (the GPU) and the second one (an audio device) and binded them using <code>echo "options vfio-pci ids=1002:1638, 1002:1637" &gt; /etc/modprobe.d/vfio.conf</code>.</p>
+<p>After a reboot one can execute <code>lspci -v</code> and check if the Kernel driver that is used for the GPU is now <code>vfio-pci</code> instead of the previous one (in my case it was <code>amdgpu</code>).</p>
+<h3 id="4-assign-the-gpu-to-the-vm">4. Assign the GPU to the VM</h3>
+<p>This can be easily be done via the Proxmox GUI using VM -&gt; Hardware -&gt; Add -&gt; PCI Device.</p>
+<p>But I ran into the issue that whenever I started the VM, my host machine would become unresponsive.
+I could identify that this did not happen when I <strong>did not check</strong> the box "All Functions".</p>
+
+  
+  
+    
+    
+  
+  <img src="https://thingsworthsharing.dev/images/proxmox-gpu-all-functions.png" class="center" style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;" decoding="async" loading="lazy"/>
+
+<h3 id="5-install-the-necessary-driver-on-the-vm">5. Install the necessary driver on the VM</h3>
+<p>Since I used Ubuntu for the VM and an AMD GPU, I didn't have to install anything, as the <code>amdgpu</code> driver is readily available.</p>
+<h2 id="issues-i-ran-into">Issues I ran into</h2>
+<p>While the steps described above sound nice and simple I encountered multiple issues.</p>
+<h3 id="missing-bios-rom">Missing BIOS ROM</h3>
+<p>After naively following the steps I did not receive any output at the display linked to the host machine when I started the VM.
+After ssh-ing into the VM I could check via <code>sudo lshw -c display</code> that GPU was detected, but that the driver was not is use for it.
+Further debugging by using <code>sudo dmesg</code> to check the kernel ring buffer revealed the following error logs:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>amdgpu: Unable to locate a BIOS ROM
+</span><span>amdgpu: Fatal error during GPU init
+</span></code></pre>
+<p>This should mean more or less, that the GPU could not be initialized by the VM, because it can not access the GPU firmware stored on in the read-only memory (ROM).
+I encountered this error, because I skipped an important step: Making the GPU BIOS available to the VM.</p>
+<p>To fix this I wanted to extract GPU BIOS, by using the tool <a href="https://github.com/stylesuxx/amdvbflash">amdvbflash</a> on the host machine, but here I had no success and only encountered the following error:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>root@proxmox:~/flash-gpu# ./amdvbflash -i
+</span><span>AMDVBFLASH version 4.71, Copyright (c) 2020 Advanced Micro Devices, Inc.
+</span><span>
+</span><span>Adapter not found
+</span></code></pre>
+<p>I am unsure, but I think the reason that this tool could not detect my GPU is due to my GPU being an AMD Cezanne one.
+Cezanne is a codename for a specific architecture GPUs that combine both a CPU and a GPU on the same chip.
+But I am not sure about that.</p>
+<p>But I was in luck and <a href="https://forum.proxmox.com/threads/guide-ryzen-5800h-igpu-passthrough-hdmi-windows11-htpc.153405/">this guide here</a> linked me to a description of the BIOS extraction process see here: <a href="https://github.com/isc30/ryzen-7000-series-proxmox/?tab=readme-ov-file#configuring-the-gpu-in-the-windows-vm">https://github.com/isc30/ryzen-7000-series-proxmox/?tab=readme-ov-file#configuring-the-gpu-in-the-windows-vm</a>.</p>
+<p>Additionally I did the <a href="https://github.com/isc30/ryzen-7000-series-proxmox/?tab=readme-ov-file#optional-getting-ovmf-uefi-bios-working-error-43">following steps</a> for the audio device.
+But I do not know if this was necessary.</p>
+<h3 id="stuck-at-800x600-resolution">Stuck at 800x600 resolution</h3>
+<p>After extracting the GPU BIOS finally got output on my display, but I could not adjust the resolution and was stuck at 800x600.
+The reason for this was probably a bug called AMD GPU reset.
+But I was again lucky and found another guide that described how to resolved it: <a href="https://www.nicksherlock.com/2020/11/working-around-the-amd-gpu-reset-bug-on-proxmox/">https://www.nicksherlock.com/2020/11/working-around-the-amd-gpu-reset-bug-on-proxmox/</a>
+After installing the vendor reset like describer in the post I could adjust my resolution.</p>
+<h3 id="redirect-usb-devices">Redirect USB devices</h3>
+<p>As a final step I redirected my mouse and keyboard.
+For this I first detected the <code>&lt;vendor-id&gt;:&lt;product-id&gt;</code> of the devices using <code>lsusb</code> on the host machine.
+Then I rebound them using:
+<code>qm set &lt;VM-ID&gt; -usb0 host=&lt;vendor-id&gt;:&lt;product-id&gt;</code>.</p>
+
+        </div>
+
+        
+    </div>
+
+    </div>
+
+    
+    <footer class="footer">
+        <div class="footer__inner">
+                <div class="copyright">
+                        <span>© 
+    2025
+ Stefan Dienst</span>
+                    <span class="copyright-theme">
+                        <span class="copyright-theme-sep">:: </span>
+                        Theme: <a href="https://github.com/pawroman/zola-theme-terminimal/">Terminimal</a> by pawroman
+                    </span>
+                </div>
+            </div>
+    </footer>
+    
+
+</div>
+</body>
+
+</html>
