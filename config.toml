@@ -1,5 +1,5 @@
 # The URL the site will be built for
-base_url = "https://stefan-dienst.github.io/things-worth-sharing"
+base_url = "https://thingsworthsharing.dev"
 theme = "terminimal"
 title = "Things worth sharing"
 description = "My blog."
