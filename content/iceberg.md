@@ -10,7 +10,7 @@ date = 2026-09-01
  - Blog will walk you through the basics using examples and explain how many features work and why they are actually such an improvement.
 
 ## Key take message
-In it's essence Apache Iceberg is a specification of a table format.
+In its essence Apache Iceberg is a specification of a table format.
 This means that it specifies how the logical concept of a table, i.e. a 2-dimensional data structure with rows and columns, can be physically stored.
 This specification contains all necessary information to implement a writer in any programming language that can take columnar data and store it in this table format.
 But in contrast to encoding data in a specific file formats, the output is not just a single file, but multiple hierarchical organized metadata and data files.
@@ -62,23 +62,23 @@ The code to run this youself can be found here [REF] and the setup looks like th
 {{ image(src="/images/iceberg/hms-setup.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 650px") }}
 
 
-When all of this is running, we create a table for a small toy dataset of the Mavel x-men (which we will use through the whole blog), using the following schema:
+When all of this is running, we create a table for a small toy dataset of the Mavel X-Men (which we will use through the whole blog), using the following schema:
 ```python
 spark.sql("""
 CREATE TABLE IF NOT EXISTS xmen (
-    id INT,             -- Identifier of the x-man, e.g. 1
-    name STRING,        -- Legal name of the x-man, e.g. Scott Summers
-    alias STRING,       -- The name the x-man is usally referred to, e.g. Cyclops
-    powers STRING,      -- The powers of the x-man as a comma seperated string, e.g. Optic blasts, team leadership
-    birth_year INT      -- The year the x-man was born, e.g. 1970
+    id INT,             -- Identifier of the X-Man, e.g. 1
+    name STRING,        -- Legal name of the X-Man, e.g. Scott Summers
+    alias STRING,       -- The name the X-Man is usally referred to, e.g. Cyclops
+    powers STRING,      -- The powers of the X-Man as a comma seperated string, e.g. Optic blasts, team leadership
+    birth_year INT      -- The year the X-Man was born, e.g. 1970
 )
-PARTITIONED BY (active BOOLEAN) -- Is the x-man still participating in adventures, e.g. true.
+PARTITIONED BY (active BOOLEAN) -- Is the X-Man still participating in adventures, e.g. true.
 STORED AS PARQUET -- We use parquet as our open file format
 LOCATION 's3a://warehouse/xmen' -- Path in our minio object storage
 """)
 ```
 
-Afterwards I insert some data first of `active=true` x-men:
+Afterwards I insert some data first of `active=true` X-Men:
 
 ```python
 spark.sql("""
@@ -238,7 +238,7 @@ which are hierarchicaly ordered, with the final goal to map many data files to a
 A **metadata file** is a JSON file that represents a version of a table. 
 It holds all snapshots that are valid for a table version.
 
-A **snapshot** is a representation of a table in a point in time and points to a manifest list. 
+A **snapshot** is a representation of a table at a point in time and points to a manifest list. 
 It is stored in a metadata file.
 
 A **manifest list** is an Avro file that groups manifest files. 
@@ -289,7 +289,7 @@ TODO: write segway
 
 ### Example: Create an Iceberg table and show file structure
 The first thing we are going to do is create an Iceberg table and have a deeper look at the metadata layer.
-For this we will be uisng PyIceberg and for our data catalog we use an sqlite database for simplicity.
+For this we will be using PyIceberg and for our data catalog we use an sqlite database for simplicity.
 
 ```python
 from pyiceberg.catalog import load_catalog
@@ -329,7 +329,7 @@ iceberg_namespace_properties  iceberg_tables
 
 We can now create namespaces in this catalog.
 Namespace are used to hierarchically group tables and are useful to avoid name conflicts. One can also give the properties, which can be useful to e.g. give more information like description or owner, but can also be used to give a specific location where data of this namespace shall be stored.
-Let's create one namespace for the x-men
+Let's create one namespace for the X-Men
 ```python
 catalog.create_namespace_if_not_exists(
     "xmen",
@@ -352,11 +352,11 @@ marvel        xmen       location      file:///tmp/warehouse/xmen
 ```
 
 Now let's create our first Iceberg table.
-For this we first load a csv of x-men characters as an arrow table,
+For this we first load a csv of X-Men characters as an arrow table,
 ```python
 from pyarrow.csv import read_csv
 
-df = read_csv("./x-men.csv")
+df = read_csv("./X-Men.csv")
 ```
 
 which looks like this:
@@ -378,17 +378,21 @@ table = catalog.create_table(
 ```
 
 Afterwards our filesystem structure has changed to:
-{{ image(src="/images/iceberg/example-catalog-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 650px") }}
+{{ image(src="/images/iceberg/example-catalog-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
+and we have our very first metadata file, `00000-<uuid-a>.metadata.json`.
+Note here that I shortened the filename for readability, and will do so for all other files. 
+For metadata files the filename follows the pattern `<version_number>-<UUID>.metadta.json`, where `version_number` is 5-digit zero padded and increases with every commit, i.e. change of the table.
 
 
-And in our database/data catalog we now have a row in the `iceberg_tables` table:
+Meanwhile in our database/data catalog we now have a row in the `iceberg_tables` table:
 
 ```
 sqlite> select * from iceberg_tables;
-catalog_name  table_namespace  table_name  metadata_location                                             previous_metadata_location
-------------  ---------------  ----------  ------------------------------------------------------------  --------------------------
-marvel        xmen             characters  file:///tmp/warehouse/xmen/characters/metadata/00000-f033b40
-                                           6-e2f7-43d1-b2bb-82e021f3ffdb.metadata.json
+catalog_name  table_namespace  table_name  metadata_location           previous_metadata_location
+------------  ---------------  ----------  --------------------------- --------------------------
+marvel        xmen             characters  file:///tmp/warehouse/xmen/
+                                           characters/metadata/
+                                           00000-<uuid-a>.metadata.json
 ```
 
 If we inspect the JSON file we see (shortened)
@@ -447,62 +451,372 @@ If we inspect the JSON file we see (shortened)
 }
 ```
 
-Don't get overhelmed by the details.
+Don't get lost in the details.
 Some things immediately catch the eye, e.g. we have a `location` like in Hive style and a list of `schemas`, but the amount of metadata is at first overhelming.
 But the important part is that this structure already promises that a lot of metadata will be stored on an Iceberg table, and we will gradually understand some of the fields down the line.
 
 Next, we want to insert data into our table.
 For this we just append our data frame:
+
 ```python
 table.append(df)
 ```
 
-This results in four new files in our filesystem, three in the metadata layera nd one in the data-layer: 
-{{ image(src="/images/iceberg/example-catalog-03.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 650px") }}
+This results in four new files in our filesystem, three in the metadata layer and one in the data-layer: 
+{{ image(src="/images/iceberg/example-catalog-03-new.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
 
 And inside our database/data catalog, we see that the metadata location has changed:
 
 ```
 sqlite> select * from iceberg_tables;
-catalog_name  table_namespace  table_name  metadata_location                        previous_metadata_location
-------------  ---------------  ----------  ---------------------------------------  --------------------------------------
-marvel        xmen             characters  file:///tmp/warehouse/xmen/characters/   file:///tmp/warehouse/xmen/characters/
-                                           metadata/00001-<uuid-b>.metadata.json    metadata/00001-<uuid-b>.metadata.json
-
+catalog_name  table_namespace  table_name  metadata_location            previous_metadata_location
+------------  ---------------  ----------  ---------------------------- ----------------------------
+marvel        xmen             characters  file:///tmp/warehouse/xmen/  file:///tmp/warehouse/xmen/  
+                                           characters/metadata/         characters/metadata/
+                                           00001-<uuid-b>.metadata.json 00000-<uuid-a>.metadata.json
 ```
 
+The current metadata location now points to the new metadata file `00001-<uuid-b>.metadata.json`, notice the increment in the version number, while the previous location points to the old one.
+This shows that in the process of appending data to the table we have not just written new data and metadata files, but done an atomic commit in our data catalog to change this.
+This atomic commit is responsible for making all newly written data "visible" for the table, because for any reader the table is just what the metadata file states.
+
+Let's inspect this on a deeper level and first look at the most important part that changed when going from version `00000` to `00001`.
+In version `00000` we had an empty list of snapshots:
+```json
+"snapshots": [],
+```
+while in `00001` we now have this:
+```json
+"snapshots": [
+     {
+       "snapshot-id": <id-1>,
+       "sequence-number": 1,
+       "timestamp-ms": 1754402715529,
+       "manifest-list": "file:///tmp/warehouse/xmen/characters/metadata/snap-<id-1>-0-<uuid-1>.avro",
+       "summary": {
+         "operation": "append",
+         "added-files-size": "2846",
+         "added-data-files": "1",
+         "added-records": "10",
+         "total-data-files": "1",
+         "total-delete-files": "0",
+         "total-records": "10",
+         "total-files-size": "2846",
+         "total-position-deletes": "0",
+         "total-equality-deletes": "0"
+       },
+       "schema-id": 0
+     }
+   ]
+"current-snapshot-id": <id-1>,
+```
+
+Here we observe two things, first we now have a snapshot in our `snapshots` list, and like previously stated, a snapshot represents a table at a point in time.
+We can see that a snapshot has a `snapshot-id`, to uniquely identify it, and that it contains information on the last operation that was used to create it, in our case we did an `append` for `10` X-Men.
+But most importantly a snapshot points to a manifest list file, in our case `snap-<id-1>-0-<uuid-1>.avro`, which we will look into more detail soon.
+
+Second, the metadata file now has a field called `current-snapshot-id`, which gives the id of the snapshot that is currently "active" for this table.
+In our case it is simply the most recently created, and only, snapshot.
+This field is used when a reader loads the metadata JSON to identify what snapshot is active and hence what manifest list file it must load next.
+
+Speaking of the manifest list file, let's examine it next.
+Regarding its filename it follows the pattern `snap-<snapshot_id>-<attempt>-<commit_uuid>.avro`, where `snapshot_id` is the id of the snapshot, `attempt` starts at `0` and is incremented for every conflict when attempting to change the location in the data catalog, and `commit_uuid` is the UUID associated with the commit.
+To inspect it we can use [avro-tools](https://github.com/satoshihirose/how-to-use-avro-tools) and [jq](https://jqlang.org/), 
+```bash
+alias avro-tools='java -jar ~/tools/avro-tools-1.11.3.jar'
+avro-tools tojson "snap-<id-1>-0-<uuid-1>.avro" | jq
+```
+which gives the following:
+```json
+{
+  "manifest_path": "file:///tmp/warehouse/xmen/characters/metadata/<uuid-1>-m0.avro",
+  "manifest_length": 4655,
+  "partition_spec_id": 0,
+  "content": 0,
+  "sequence_number": 1,
+  "min_sequence_number": 1,
+  "added_snapshot_id": <id-1>,
+  "added_files_count": 1,
+  "existing_files_count": 0,
+  "deleted_files_count": 0,
+  "added_rows_count": 10,
+  "existing_rows_count": 0,
+  "deleted_rows_count": 0,
+  "partitions": {
+    "array": []
+  },
+  "key_metadata": null
+}
+```
+Ignoring the metadata for the moment, the most important part is the field `manifest_path` pointing to a manifest file.
+And if we inspect the manifest file using:
+
+```bash
+avro-tools tojson "<uuid-1>-m0.avro" | jq
+```
+
+we see:
+
+```json
+{
+  "status": 1,
+  "snapshot_id": {
+    "long": 1110035385487351968
+  },
+  "sequence_number": null,
+  "file_sequence_number": null,
+  "data_file": {
+    "content": 0,
+    "file_path": "file:///tmp/warehouse/xmen/characters/data/00000-0-<uuid-1>.parquet",
+    "file_format": "PARQUET",
+    "partition": {},
+    "record_count": 10,
+    "file_size_in_bytes": 2846,
+    "column_sizes": {
+        [...]
+    },
+    "value_counts": {
+        [...]
+    },
+    "null_value_counts": {
+        [...]
+    },
+    "nan_value_counts": {
+      "array": []
+    },
+    "lower_bounds": {
+      "array": [
+            [...]
+        {
+          "key": 3,
+          "value": "Beast"
+        },
+            [...]
+      ]
+    },
+    "upper_bounds": {
+      "array": [
+            [...]
+        {
+          "key": 3,
+          "value": "Wolverine"
+        },
+            [...]
+      ]
+    },
+    "key_metadata": null,
+    "split_offsets": {
+      "array": [
+        4
+      ]
+    },
+    "equality_ids": null,
+    "sort_order_id": null
+  }
+}
+```
+
+Here I have ommitted many fields for readability, but the key insight is that the manifest file lists data files.
+In our case it stores just one, i.e. `00000-0-<uuid-1>.parquet`, which follows the filename pattern `00000-<task_id>-<commit_uuid>.parquet`, where `task_id` is specific to the writer used to create it.
+Additionally, it stores metadata information on the data inside those data files, e.g. `lower_bounds` and `upper_bounds` give the bound values for each column.
+For example for the name field, which has the id `3`, we can see that the data file `00000-0-<uuid-1>.parquet` contains on the lower bound the X-Man "Beast" and on the uppper "Wolverine".
+If would be looking for the X-Man "Angel", which is not included in this range, we instantly know that we could skip this data file.
+This technique is called [[pruning]] and becomes very efficient in Apache Iceberg, because we can directly prune from the manifest file level, without having to query the indiviual underlying data files metadata.
+
+To summarize our table is given by the following file hierachy:
+{{ image(src="/images/iceberg/example-catalog-04.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 350px") }}
+which a reader just traverses to collect all data files that make up the current state of a table.
+
+For the following examples, if not stated otherwise, we will use this state as a base to showcase other features.
+
+### Example: Append more X-Men
+As a simple next example we just want to add three more X-Men stored in a  CSV.
+We can simply do this using:
+```python
+df = read_csv("./x-men2.csv")
+table = catalog.load_table(identifier="xmen.characters")
+table.append(df)
+```
+
+Looking at the filesystem structure we see the same result as for the first append: three more metadata files and one data file.
+{{ image(src="/images/iceberg/example-append-01.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
+
+But in contrast, the now active manifest list file does not only point to one manifest file, but two:
+
+{{ image(src="/images/iceberg/example-append-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 550px") }}
+
+The idea stays the same: A reader loads the manifest file and traverses all child manifest files and associated data files to get the current state of the table.
+Why it may seem wasteful that a simple append produces that many files, this wastefulness is exactly what gives Apache Iceberg its powers.
+Because now we not only see the current state of the table, but have the information what operations where done in what order to get to this state, see for example what the snapshot list of the metadata file `00002-<uuid-c>.metadata.json` looks like:
+```json
+"snapshots": [
+  {
+    "snapshot-id": <id-1>,
+    "sequence-number": 1,
+    "timestamp-ms": 1754402715529,
+    "manifest-list": "file:///tmp/warehouse/xmen/characters/metadata/snap-{id-1}-0-<uuid-1>.avro",
+    "summary": {
+      "operation": "append",
+      "added-files-size": "2846",
+      "added-data-files": "1",
+      "added-records": "10",
+        [...]
+    },
+    "schema-id": 0
+  },
+  {
+    "snapshot-id": <id-2>,
+    "parent-snapshot-id": <id-1>,
+    "sequence-number": 2,
+    "timestamp-ms": 1754405155465,
+    "manifest-list": "file:///tmp/warehouse/xmen/characters/metadata/snap-{id-2}-0-<uuid-2>.avro",
+    "summary": {
+      "operation": "append",
+      "added-files-size": "2571",
+      "added-data-files": "1",
+      "added-records": "3",
+        [...]
+    },
+    "schema-id": 0
+  }
+],
+```
+
+### Example: Delete an X-Man
+In this example we want to delete an X-Man from the table, because their existence was eliminated from all timelines. 
+Without Apache Iceberg we would need to do the following:
+ 1. Find the file were the X-Man is stored.
+ 2. Load it into memory.
+ 3. Delete the record of the X-Man we want to delete.
+ 4. Overwrite the orignal file, now without the deleted record.
+
+Depending on the table setup this could result in either loading a single file, loading many files that belong to a single partition or loading all files that belong to the table.
+Hence, for big tables and a number of records to be deleted this can be a wasteful operation.
+While the way our table is partitioned could limit the overwrite to only a few partitions, the deletion of a single row from a table with several giga byte large partitions still involves large unnecessary data movements.
+
+Apache Iceberg solves this issue by not actually deleting records in the data files, but by adding the concept of a delete file. 
+A delete file shares a lot of similarities with a data file, but instead of describing records that are "added" to a table, it describes records that are "removed". 
+They therefore act like a filter to remove records from previously added data files.
+
+Let's look at an example, where we will use PySpark, because [PyIceberg does not support writing delete files yet](https://iceberg.apache.org/status/#table-spec-v2_3).
+We first create a `SparkSession` that is connected to our already sqlite data catalog
+```python
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder.appName("deleting-x-man")
+    # Iceberg packages
+    .config(
+        "spark.jars.packages",
+        "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,"
+        "org.xerial:sqlite-jdbc:3.46.0.0",
+    )
+    # Configure catalog to use SQLite via JDBC
+    .config(
+        "spark.sql.extensions",
+        "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+    )
+    .config("spark.sql.catalog.marvel", "org.apache.iceberg.spark.SparkCatalog")
+    .config("spark.sql.catalog.marvel.type", "jdbc")
+    .config(
+        "spark.sql.catalog.marvel.uri",
+        "jdbc:sqlite:////tmp/warehouse/pyiceberg_catalog.db",
+    )
+    .config("spark.sql.catalog.marvel.warehouse", "file:///tmp/warehouse")
+    .getOrCreate()
+)
+```
+
+Then we delete the unlucky Cyclopse by id
+
+```python 
+spark.sql("DELETE FROM marvel.xmen.characters WHERE id = 1")
+```
+
+If we inspect filesystem structure we see the following:
+
+{{ image(src="/images/iceberg/example-delete-01.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
+
+No delete file written.
+Instead, if we inspect the latest snapshot, we see that it points to the two new manifest files.
+```json
+{
+  "manifest_path": "file:/tmp/warehouse/xmen/characters/metadata/<uuid-2>-m1.avro",
+  "manifest_length": 7373,
+  "partition_spec_id": 0,
+  "content": 0,
+  "sequence_number": 2,
+  "min_sequence_number": 2,
+  "added_snapshot_id": 48153905500596197,
+  "added_files_count": 1,
+  "existing_files_count": 0,
+  "deleted_files_count": 0,
+  "added_rows_count": 9,
+  "existing_rows_count": 0,
+  "deleted_rows_count": 0,
+  "partitions": {
+    "array": []
+  },
+  "key_metadata": null
+}
+{
+  "manifest_path": "file:/tmp/warehouse/xmen/characters/metadata/<uuid-2>-m0.avro",
+  "manifest_length": 7371,
+  "partition_spec_id": 0,
+  "content": 0,
+  "sequence_number": 2,
+  "min_sequence_number": 2,
+  "added_snapshot_id": 48153905500596197,
+  "added_files_count": 0,
+  "existing_files_count": 0,
+  "deleted_files_count": 1,
+  "added_rows_count": 0,
+  "existing_rows_count": 0,
+  "deleted_rows_count": 10,
+  "partitions": {
+    "array": []
+  },
+  "key_metadata": null
+}
+
+```
+If we look inside the corresponding manifest files, we find that the `<uuid-2>-m0.avro` manifest file points to the old `00000-0-<uuid-1>.parquet` data file with ten X-Men.
+This one is marked as deleted in the manifest list `"deleted_files_count": 1,`, so it will not be considered for the current state of the table.
+The `<uuid-2>-m1.avro` manifest file points to the new `00000-0-<uuid-2>.parquet` data file with only nine X-Men, which now make up the whole table.
+{{ image(src="/images/iceberg/example-delete-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 550px") }}
 
 
+We got this result, because per default the [`write.delete.mode` of our Iceberg table is set to `copy-on-write`](https://iceberg.apache.org/docs/latest/configuration/#write-properties).
+In this mode the writer has to do the heavy lifting and whole data files are copied and rewritten, just like described above.
+But Iceberg allows to change behavior.
 
-TODO: Add the blow infos somewhere
 
- - Note here, that iceberg does default to fast append, which creates a new manifest file for every append. Here I have to test if I can disable this, otherwise the number of manifest files would spiral out of control, which negates one of the positive aspects that iceberg has over hive.
- - The file names: 
-    - The metadata files follow the pattern of 5-digit zero padded version number, which increases for every commit. This is followed by a UUID.
-    - The manifest list files follow the pattern "snap-<snapshot_id>-<attempt>-<commit_uuid>.avro". Here attempt is incremented when a collision on commit occurs. Here the commit_uuid stays the same and just a new mani gets list file with an incremented attempt is written. This avoids rewriting files on a collision.
-    - The manifest files are simple named as "<commit_uuid>-m<num>.abro", where num is incremented for every manifest file that is written in this commit.
-    - The data files follow the naming convention: "0000-<task_id>-<commit_uuid>. parquet". Here task_id is incremented for every written data files in the commit.
+Let's rewind time, and delete Cyclopse again, but this time with the `merge-on-read` mode. 
+For this we first have to alter our table properties, using
+```python
+spark.sql("ALTER TABLE marvel.xmen.characters SET TBLPROPERTIES ('write.delete.mode' = 'merge-on-read')")
+```
+and then just delete Cyclopse again
+```python
+spark.sql("DELETE FROM marvel.xmen.characters WHERE id = 1")
+```
+Like always we check the filesystem structure to see what happened:
+{{ image(src="/images/iceberg/example-delete-03.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
 
-### Example: Delete rows
-Show here what happens with deletes files and how sequence numbers are used.
+We now have a delete file!
+Also, we have an additional metadata file, which captures the change of the `write.delete.mode`.
+Inspecting the latest snapshot we see the following hierachy:
+{{ image(src="/images/iceberg/example-delete-04.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 550px") }}
 
-But I think I could only show this with iceberg java, as this is not supported by PyIceberg.
--> use rust here.
+When the table is now read first the data files are loaded.
+Then the delete files are loaded
+ - This is an posittion delete file now
+ - With multiple deletes and appends and stuff things are more complex and require a sequence number to apply data and delete fiels in correct order
 
- - Imagine we now want to delete some X-Men from the table because their existence was eliminated from all timelines. Without Apache Iceberg we would need to:
-    1. Load all data of the table into memory, e.g. a data frame object.
-    2. Delete the records we want to delete.
-    3. Rewrite the data to files, now without the deleted records.
- - Depending on the size of the table and number of records to be deleted this can be a wasteful operation. While the way our table is partitioned could limit the rewrite to only a few partitions, the deletion of a single row from a table with several giga byte large partitions still involves large unnecessary data movements.
- - Apache Iceberg solves this issue by not actually deleting records in the data files, but by adding the concept of a delete file. A delete file shares a lot of similarities with a data file, but instead of describing records that are "added" to a table, it describes records that are "removed". They therefore act like a filter to remove records from previously added data files.
- - Here Apache Iceberg differentiates between:
-    - Position deletes
-    - Equality deletes
-- Explain sequence number?!
 
-To really get the difference here I must check how records are identified.
-done: check the specs.
- -> there is the option to add to the schema a combination of columns that should uniquely identify a record. But this is not enforced by the spec and only serves as a help for writers.
+ - Then do v3 move
+
+
 
  - Explain the equality deletes quickly with the rust script. Don't go too deep into detail.
 
