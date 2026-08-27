@@ -62,7 +62,7 @@ The code to run this youself can be found here [REF] and the setup looks like th
 {{ image(src="/images/iceberg/hms-setup.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 650px") }}
 
 
-When all of this is running, we create a table for a small toy dataset of the Mavel X-Men (which we will use through the whole blog), using the following schema:
+When all of this is running, we create a table for a small toy dataset of the Marvel X-Men (which we will use through the whole blog), using the following schema:
 ```python
 spark.sql("""
 CREATE TABLE IF NOT EXISTS xmen (
@@ -698,6 +698,7 @@ Apache Iceberg solves this issue by not actually deleting records in the data fi
 A delete file shares a lot of similarities with a data file, but instead of describing records that are "added" to a table, it describes records that are "removed". 
 They therefore act like a filter to remove records from previously added data files.
 
+#### Copy-on-write
 Let's look at an example, where we will use PySpark, because [PyIceberg does not support writing delete files yet](https://iceberg.apache.org/status/#table-spec-v2_3).
 We first create a `SparkSession` that is connected to our already sqlite data catalog
 ```python
@@ -727,7 +728,7 @@ spark = (
 )
 ```
 
-Then we delete the unlucky Cyclopse by id
+Then we delete the unlucky Cyclops by id
 
 ```python 
 spark.sql("DELETE FROM marvel.xmen.characters WHERE id = 1")
@@ -737,7 +738,7 @@ If we inspect filesystem structure we see the following:
 
 {{ image(src="/images/iceberg/example-delete-01.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
 
-No delete file written.
+No delete file written!
 Instead, if we inspect the latest snapshot, we see that it points to the two new manifest files.
 ```json
 {
@@ -791,12 +792,13 @@ In this mode the writer has to do the heavy lifting and whole data files are cop
 But Iceberg allows to change behavior.
 
 
-Let's rewind time, and delete Cyclopse again, but this time with the `merge-on-read` mode. 
+#### Merge-on-read
+Let's rewind time, and delete Cyclops again, but this time with the `merge-on-read` mode. 
 For this we first have to alter our table properties, using
 ```python
 spark.sql("ALTER TABLE marvel.xmen.characters SET TBLPROPERTIES ('write.delete.mode' = 'merge-on-read')")
 ```
-and then just delete Cyclopse again
+and then just delete Cyclops again
 ```python
 spark.sql("DELETE FROM marvel.xmen.characters WHERE id = 1")
 ```
@@ -805,79 +807,915 @@ Like always we check the filesystem structure to see what happened:
 
 We now have a delete file!
 Also, we have an additional metadata file, which captures the change of the `write.delete.mode`.
-Inspecting the latest snapshot we see the following hierachy:
+Inspecting the latest snapshot we see the following hierarchy:
 {{ image(src="/images/iceberg/example-delete-04.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 550px") }}
 
-When the table is now read first the data files are loaded.
-Then the delete files are loaded
- - This is an posittion delete file now
- - With multiple deletes and appends and stuff things are more complex and require a sequence number to apply data and delete fiels in correct order
+Now when the table is access the reader has to do the heavy lifting.
+It must first load the data file and then the delete file, which in our case looks like this:
+```
++------------------------------------------------------------------+-------+
+| file_path                                                        |   pos |
+|------------------------------------------------------------------+-------|
+| file:/tmp/warehouse/xmen/characters/data/00000-0-<uuid-1>.parquet|     0 |
++------------------------------------------------------------------+-------+
+```
+It just states what position, `0`, in what file, `00000-0-<uuid-1>.parquet`, should be deleted, which is why this kind of delete files are called a [**position delete files**](https://iceberg.apache.org/spec/#position-delete-files).
+The actual data is then "merged" with the delete file to remove Cyclops, and yield the final table with nine X-Men.
+In practice the [process is a bit more complicated](https://iceberg.apache.org/spec/#scan-planning), but in its gist this is how it works.
 
+#### Deletion vectors
+At this point it is a good time to talk about the different versions of the Apache Iceberg specification, because position delete files have been deprecated in v3 and been replaced by [**deletion vectors**](https://iceberg.apache.org/spec/#deletion-vectors).
+A new version of the specification is introduced when features are added that would break forward compatibility, i.e. old readers can no longer correctly read tables using new features.
+When writing this blog post v1, v2 and v3 have been released, while v4 is in active developement.
+The most confusing part for versions is that there is a heavy discrepancy on feature implementation status between the different implementations.
+The status can be compared [here](https://iceberg.apache.org/status/), where the Java implementation is always the most complete one and leads direction.
+But others like PyIceberg are trying to keep up, see for example there [progress on implementing all features for v3](https://github.com/apache/iceberg-python/issues/1818).
 
- - Then do v3 move
-
-
-
- - Explain the equality deletes quickly with the rust script. Don't go too deep into detail.
-
-Check this Reference for details: 
-https://www.linkedin.com/pulse/delete-files-vs-deletion-vectors-apache-iceberg-how-v3-alex-merced-uo58e?utm_source=share&utm_medium=member_android&utm_campaign=share_via
-
-And see here the PyIceberg is working on a V3 Implantation:
-https://github.com/apache/iceberg-python/issues/1818
-
-### Example: Upsert
-Use an upsert to manipulate rows.
-See what happens.
-
-Writer here about the difference between:
- - merge-on-read
- - copy-on-write
-
-### Example: Schema evolution
-
-### Example: partitioning 
-Show what happens when we add partitioning.
-
-
-### Example: table scan
-Show what files are loaded compare lower bound and higher bound.
-
-With this I should have explained lot of the advantages.
-
-### Example: Branching and References
-
-### Example: Time travel
-
-
-## Transcational
-How is concurrency handled?
-Maybe start two transactions synchronously and then see what happens if the other commits first.
-
-- NEW: Maybe I can just move all of this to the data catalog (Hive) section on the demands for atomic swaps.
-
-See for example how `append` method on `Table` is using transcations:
+To showcase this let's do another example for deletion vectors and rewind time again!
+When we started out creating our `xmen` table the version defaulted to v2, because we used PyIceberg for it.
+The available features are bound to the version of the table, and therefore even if we use PySpark to delete Cyclops, which uses the v3 compatibile Jave implemention, we will not produce a deletion vector.
+But we can upgrade the version of a table by changing its properties, which can be done using:
 ```python
-def append(self, df: pa.Table, snapshot_properties: Dict[str, str] = EMPTY_DICT) -> None:
-    """
-    Shorthand API for appending a PyArrow table to the table.
-
-    Args:
-        df: The Arrow dataframe that will be appended to overwrite the table
-        snapshot_properties: Custom properties to be added to the snapshot summary
-    """
-    with self.transaction() as tx:
-        tx.append(df=df, snapshot_properties=snapshot_properties)
+spark.sql("""
+    ALTER TABLE marvel.xmen.characters 
+    SET TBLPROPERTIES ('format-version' = '3',     
+                       'write.delete.mode' = 'merge-on-read'
+)
+""")
+```
+To ensure us that this worked we can inspect the table properties:
+```python
+df = spark.sql("SHOW TBLPROPERTIES marvel.xmen.characters")
+df.show()
+```
+to see
+```
++-------------------+-------------------+
+|                key|              value|
++-------------------+-------------------+
+|current-snapshot-id|             <id-2>|
+|             format|    iceberg/parquet|
+|     format-version|                  3|
+|  write.delete.mode|      merge-on-read|
++-------------------+-------------------+
 ```
 
-I probably also can't do this with SQLCatalog as sqlite does not support concurrency.
+Then just delete Cyclops again
+```python
+spark.sql("DELETE FROM marvel.xmen.characters WHERE id = 1")
+```
+
+The file setup is now identical to the previous v2 delete, but we get a puffin delete file `00000-0-<uuid-2>-0001-deletes.puffin` instead of a parquet one.
+The big difference here is that a position delete file stores one line per deleted row and that there can be many delete files associated with a single data file.
+For example if we would delete more and more X-Men one by one, we would create a new delete file for each deletion.
+This adds more and more work for a reader, having to scan many delete files, leading to bad performances.
+In contrary a deletion vector is a [[bitmap]] that encodes what rows are deleted, i.e. an array of bits, one for each row of the associated data file, where a 1 indicates that this record is deleted.
+Additionally the v3 specification states that writes have to make sure that only one deletion vector exists for any data file.
+Hence, a delete is now no longer a file creation operation, but a bitmap modification operation.
+For more infos on this see [here](https://iceberglakehouse.com/posts/iceberg-v3-deletion-vectors-merge-on-read/).
+
+Let's have a look at the [puffin file](https://iceberg.apache.org/puffin-spec/), which is in very short storing an array of blobs and a JSON, that describes how to interpret these blobs.
+In our case the JSON looks like this:
+```json
+{
+  "blobs": [
+    {
+      "type": "deletion-vector-v1",
+      "fields": [
+        2147483645
+      ],
+      "snapshot-id": -1,
+      "sequence-number": -1,
+      "offset": 4,
+      "length": 42,
+      "properties": {
+        "referenced-data-file": "file:///tmp/warehouse/xmen/characters/data/00000-0-<uuid-1>.parquet",
+        "cardinality": "1"
+      }
+    }
+  ],
+  "properties": {
+    "created-by": "Apache Iceberg 1.10.0 (commit 2114bf631e49af532d66e2ce148ee49dd1dd1f1f)"
+  }
+}
+```
+
+This tell us that the blob at offset 4 is a deletion-vector-v1 type, which references the data file `00000-0-<uuid-1>.parquet` and deletes a single row (`cardinality: 1`).
+To now actually know which row was deleted, i.e. checking which bit is 1 in the bitmap, a reader would now need to decode the blob.
+
+#### Equality delete files
+As probably already suspected, position delete files are not the only kind of delete files, there are also [equality delete files](https://iceberg.apache.org/spec/#position-delete-files).
+In contrast, they do not delete rows by indiviually referencing them, but state a specific column-value combination, and all rows that match it should be deleted.
+The reader is then responsible to select these rows and discard them from the table.
+
+I was unable to "force" PySpark to do a equality delete, it seems to prefer deleting by position. 
+Therefore I opted for [iceberg-rust](https://github.com/apache/iceberg-rust) to manually create a equality delete file, which you can see [REF].
+To spare you the details, I simply delete all inactive x-men, i.e. deleting all rows where the field `active=false`.
+This simply yielded the file `delete-00000.parquet`, which looks as follows:
+
+```
++----------+
+|   active |
+|----------|
+|        0 |
++----------+
+```
+
+
+### Example: Update an X-Man
+In the same fashion as a delete we can use Apache Icebergs `merge-on-read` mode to update a single X-Man.
+Starting from our base line table we again need to change the `write.update.mode`:
+```python
+spark.sql("""
+    ALTER TABLE marvel.xmen.characters 
+    SET TBLPROPERTIES (
+        'write.update.mode' = 'merge-on-read',
+        'format-version' = '2'
+    )
+""")
+```
+and then due to some beef with Wolverine, Cyclops decides to stop being an X-Man and we update him:
+```python
+spark.sql("""
+    UPDATE marvel.xmen.characters
+    SET active = false
+    WHERE id = 1
+""")
+```
+This yields the following filesystem structure:
+{{ image(src="/images/iceberg/example-update-01.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 850px") }}
+
+A delete file that deletes the initial row for Cyclops was created and a data file that holds his
+new active status. 
+In addition a manifest file was created for each of the new data/delete files.
+The latest snapshot now points to all existing manifest files, which in combindation show the
+desired state of the table.
+
+{{ image(src="/images/iceberg/example-update-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 750px") }}
+
+### Example: Schema evolution
+When we initially looked at one of the metadata JSON files of our Iceberg table, you may have noticed the fields called `schemas` with list type and `current-schema-id` with an int type.
+These are reminiscent of the `snapshots` and `current-snapshot-id` fields, but instead of allowing our table to change over time, allow the schema of the table to change.
+This change is called schema evolution, and how it works can be shown in a quick demonstration.
+
+We start of with our base table with the known schema:
+```python
+table = catalog.load_table("xmen.characters")
+print(table.schema())
+```
+```
+table {
+  1: id: optional long
+  2: name: optional string
+  3: alias: optional string
+  4: powers: optional string
+  5: birth_year: optional long
+  6: active: optional boolean
+}
+```
+
+Now PyIceberg allows us to alter the schema via methods, for example re-naming, adding or chaning the order of columns:
+
+```python
+with table.update_schema() as update:
+    update.rename_column("alias", "codename")
+    update.add_column("first_appearance", StringType())
+    update.move_after("active", "first_appearance")
+```
+
+Now we can add **new** X-Men that follow this new schema to the table:
+```python
+df = read_csv("./x-men3.csv")
+table.append(df)
+```
+and if we take a look at it
+```python
+print(table.scan().to_pandas())
+```
+we see the following:
+```
+id              name      codename                                      powers  birth_year         first_appearance  active
+11  Illyana Rasputin         Magik  Teleportation through Limbo and dark magic        1982      Giant-Size X-Men #1    True
+12  Roberto da Costa       Sunspot  Solar energy absorption and super strength        1984  Marvel Graphic Novel #4    True
+ 1     Scott Summers       Cyclops               Optic blasts, team leadership        1970                      NaN    True
+ 2         Jean Grey       Phoenix       Telepathy, telekinesis, Phoenix Force        1972                      NaN    True
+```
+
+Notice, that the schema has changed and that for the new column `first_appearance`, that was none existing for the old data we wrote, we simply get a `NaN` value.
+
+So how does this work?
+Under the hood the first parquet file that we wrote has not changed. 
+It still has the original schema, with the `alias` column.
+
+```
++------+-----------------+--------------+-----------+--------------+----------+
+|   id | name            | alias        | powers    |   birth_year | active   |
+|------+-----------------+--------------+-----------+--------------+----------|
+|    1 | Scott Summers   | Cyclops      | [...]     |         1970 | True     |
+|    2 | Jean Grey       | Phoenix      | [...]     |         1972 | True     |
+[...]
+```
+
+In contrast the new parquet file has the re-named column `codename` instead and the new columnn `first_appearance` right before the `active` column:
+
+```
++------+------------------+------------+--------+--------------+-------------------------+----------+
+|   id | name             | codename   | powers |   birth_year | first_appearance        | active   |
+|------+------------------+------------+--------+--------------+-------------------------+----------|
+|   11 | Illyana Rasputin | Magik      | [...]  |         1982 | Giant-Size X-Men #1     | True     |
+|   12 | Roberto da Costa | Sunspot    | [...]  |         1984 | Marvel Graphic Novel #4 | True     |
++------+------------------+------------+--------+--------------+-------------------------+----------+
+```
+
+Without Apache Iceberg these parquet files would be incompatible.
+If the reader you choose to view them is positioned based then the columns no longer line up and the data types are even different.
+For a name based reader one could match the existing values for the `active` column and just add `NaN` for the new `first_appearance` one.
+But because of the re-name `alias` -> `codename` the reader could not make sense of the change.
+
+Apache Iceberg fixes this by not being based on position or name, but instead referencing fields by id.
+If we take a look at the new metadata file that has been produced, we will see that `schemas` now has two entries:
+
+```json
+"schemas": [
+  {
+    "type": "struct",
+    "fields": [
+      {
+        "id": 1,
+        "name": "id",
+        "type": "long",
+        "required": false
+      },
+      {
+        "id": 2,
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 3,
+        "name": "alias",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 4,
+        "name": "powers",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 5,
+        "name": "birth_year",
+        "type": "long",
+        "required": false
+      },
+      {
+        "id": 6,
+        "name": "active",
+        "type": "boolean",
+        "required": false
+      }
+    ],
+    "schema-id": 0,
+    "identifier-field-ids": []
+  },
+  {
+    "type": "struct",
+    "fields": [
+      {
+        "id": 1,
+        "name": "id",
+        "type": "long",
+        "required": false
+      },
+      {
+        "id": 2,
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 3,
+        "name": "codename",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 4,
+        "name": "powers",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 5,
+        "name": "birth_year",
+        "type": "long",
+        "required": false
+      },
+      {
+        "id": 7,
+        "name": "first_appearance",
+        "type": "string",
+        "required": false
+      },
+      {
+        "id": 6,
+        "name": "active",
+        "type": "boolean",
+        "required": false
+      }
+    ],
+    "schema-id": 1,
+    "identifier-field-ids": []
+  }
+]
+```
+
+Here every field has an id, and we can see that the field with id `3` had the name `alias` in the first version and in the latest it is called `codename`.
+Now if we inspect the [file metadata](https://parquet.apache.org/docs/file-format/metadata/) of our parquet files using
+
+```bash
+parquet-tools meta ./data/00000-0-<uuid-2>.parquet | jq
+```
+
+We find inside each `SchemaElement` a `FieldID`.
+For example for the `codename` column we get the following in the most recently written parquet file:
+```json
+{
+  "PathInSchema": [
+    "codename"
+  ],
+  "Type": "BYTE_ARRAY",
+  "RepetitionType": "OPTIONAL",
+  "ConvertedType": "convertedtype=UTF8",
+  "LogicalType": "logicaltype=STRING",
+  "FieldID": 3,
+  "Encodings": [
+    "PLAIN",
+    "RLE",
+    "RLE_DICTIONARY"
+  ],
+  "CompressedSize": 98,
+  "UncompressedSize": 80,
+  "NumValues": 2,
+  "NullCount": 0,
+  "MaxValue": "Sunspot",
+  "MinValue": "Magik",
+  "FileOffset": 0,
+  "DataPageOffset": 303,
+  "DictionaryPageOffset": 260,
+  "EncodingStats": [
+    {
+      "PageType": "DICTIONARY_PAGE",
+      "Encoding": "PLAIN",
+      "Count": 1
+    },
+    {
+      "PageType": "DATA_PAGE",
+      "Encoding": "RLE_DICTIONARY",
+      "Count": 1
+    }
+  ],
+  "SizeStatistics": {
+    "UnencodedByteArrayDataBytes": 12,
+    "DefinitionLevelHistogram": [
+      0,
+      2
+    ]
+  },
+  "CompressionCodec": "ZSTD"
+},
+```
+When appending the data, the PyIceberg PyIceberg writer took care of embedding these file ids into the data file.
+This way when a reader now scans the table it can project the data of the underlying data files onto the most recent schema, even through they may have been written with an older one.
+
+
+### Example: Partitioning 
+In the old hive way partitions were solely encoded in the directory path, e.g. `/year=2026/month=08/day=13`.
+This goes by the name of [[hive style partitioning]].
+While it is straight forward, there are two downsides to it:
+First, the data values are directly used in the path, which can lead to errors depending on the storage for special characters like spaces or slashes.
+Second, the partitioning scheme is directly encoded in the path structure, with no intermediate layer.
+This way for every change in the way data is partitioned, the path structure needs to change.
+
+The first downsides is nicley handled in Apache Iceberg by [URL encoding special characters](https://github.com/apache/iceberg/pull/10329).
+Let's look at this for some x-men with special characters in their aliases:
+| id | name | alias | powers | birth_year | active |
+|----|------|-------|--------|------------|--------|
+| 1 | Warren Kenneth Worthington III | Angel/Archangel | Flight with feathered wings, aerial combat | 1963 | TRUE |
+| 2 | Kevin Sydney | Changeling=Morph | Shapeshifting, Psionic powers, Skilled actor | 1968 | FALSE |
+
+
+Here we will just partition on the value of the alias field, without changing it, i.e. we use an identity transformation:
+```python
+from pyiceberg.partitioning import PartitionField, PartitionSpec
+from pyiceberg.transforms import IdentityTransform
+
+partition_spec = PartitionSpec(
+    PartitionField(
+        source_id=3, field_id=1000, transform=IdentityTransform(), name="alias"
+    )
+)
+table = catalog.create_table(
+    identifier="xmen.characters",
+    schema=schema,
+    partition_spec=partition_spec,
+)
+table.append(df)
+```
+
+This yields the following filesystem structure:
+```
+$ tree
+.
+├── pyiceberg_catalog.db
+└── xmen
+    └── characters
+        ├── data
+        │   ├── alias=Angel%2FArchangel
+        │   │   └── 00000-0-<uuid-1>.parquet
+        │   └── alias=Changeling%3DMorph
+        │       └── 00000-1-<uuid-1>.parquet
+        └── metadata
+            ├── 00000-<uuid-a>.metadata.json
+            ├── 00001-<uuid-b>.metadata.json
+            ├── <uuid-1>-m0.avro
+            └── snap-<id-1>-0-<uuid-1>.avro
+```
+The special characters are safley encoded: `/` -> `%2F` and `=` -> `%3D`.
+
+This is a nice feature, but the far bigger feature is that Iceberg actually decouples the partitioning of a table from its physical layout, which solved the second downside.
+When we created the table the information of the partition spec is stored in the metadata file:
+
+```
+"partition-specs": [
+    {
+      "spec-id": 0,
+      "fields": [
+        {
+          "source-id": 3,
+          "field-id": 1000,
+          "transform": "identity",
+          "name": "alias"
+        }
+      ]
+    }
+  ]
+```
+
+If we now come to the conclusion that using the full `alias` for partitioning our x-men table may not be that smart, we can just change it.
+For example we could delete our identity transformation and partition by the first letter of the alias by using the `TruncateTransform`:
+```python
+from pyiceberg.transforms import TruncateTransform
+
+with table.update_spec() as update:
+    update.remove_field("alias")
+    update.add_field("alias", TruncateTransform(1), "alias_truncated")
+```
+
+For other transformations see [the spec here](https://iceberg.apache.org/spec/#partitioning).
+
+If we now append more x-men...
+```python
+df = read_csv("./x-men.csv")
+table.append(df)
+```
+
+the filesystem structure changes to
+
+```
+$ tree
+.
+├── pyiceberg_catalog.db
+└── xmen
+    └── characters
+        ├── data
+        │   ├── alias=Angel%2FArchangel
+        │   │   └── 00000-0-<uuid-1>.parquet
+        │   ├── alias=Changeling%3DMorph
+        │   │   └── 00000-1-<uuid-1>.parquet
+        │   ├── alias_truncated=B
+        │   │   └── 00000-4-<uuid-2>.parquet
+        │   ├── alias_truncated=C
+        │   │   └── 00000-0-<uuid-2>.parquet
+        │   ├── alias_truncated=N
+        │   │   └── 00000-5-<uuid-2>.parquet
+        │   ├── alias_truncated=P
+        │   │   └── 00000-1-<uuid-2>.parquet
+        │   ├── alias_truncated=Q
+        │   │   └── 00000-6-<uuid-2>.parquet
+        │   ├── alias_truncated=R
+        │   │   └── 00000-7-<uuid-2>.parquet
+        │   ├── alias_truncated=S
+        │   │   └── 00000-3-<uuid-2>.parquet
+        │   └── alias_truncated=W
+        │       └── 00000-2-<uuid-2>.parquet
+        └── metadata
+            ├── 00000-<uuid-a>.metadata.json
+            ├── 00001-<uuid-b>.metadata.json
+            ├── 00002-<uuid-c>.metadata.json
+            ├── 00003-<uuid-d>.metadata.json
+            ├── <uuid-1>-m0.avro
+            ├── <uuid-2>-m0.avro
+            ├── snap-<id-2>-0-<uuid-2>.avro
+            └── snap-<id-1>-0-<uuid-1>.avro
+```
+
+We see that the old partitions are still there, but for the new records the new partition spec was used.
+The most recent metadata file now contains a new partition spec
+
+```json
+"partition-specs": [
+    {
+      "spec-id": 0,
+      "fields": [
+        {
+          "source-id": 3,
+          "field-id": 1000,
+          "transform": "identity",
+          "name": "alias"
+        }
+      ]
+    },
+    {
+      "spec-id": 1,
+      "fields": [
+        {
+          "source-id": 3,
+          "field-id": 1001,
+          "transform": "truncate[1]",
+          "name": "alias_truncated"
+        }
+      ]
+    }
+  ]
+```
+
+and the latest manifest list file states what partition spec was used to create which manifest file:
+
+```json
+{
+  "manifest_path": "file:///tmp/warehouse/xmen/characters/metadata/<uuid-2>-m0.avro",
+  "manifest_length": 7325,
+  "partition_spec_id": 1,
+    [...]
+}
+{
+  "manifest_path": "file:///tmp/warehouse/xmen/characters/metadata/<uuid-1>-m0.avro",
+  "manifest_length": 5268,
+  "partition_spec_id": 0,
+    [...]
+}
+```
+
+The concept of decoupling logical from physical layout is similiar to the previous schema evolution section.
+In short it allows a reader to still understand the "old way" of partitioning our data, while a writer can write new data with the new spec.
+To show this we can look at what happens if we want to fitler for x-men, whos alias starts with a "C":
+```python
+scan = table.scan(row_filter="alias like 'C%'")
+```
+
+Then we can look at the files that reader identified:
+```
+tasks = scan.plan_files()
+```
+
+and printing them nicely yields:
+
+```
+================================================================================
+Files to read:
+================================================================================
+
+File: file:///tmp/warehouse/xmen/characters/data/alias_truncated=C/00000-0-<uuid-2>.parquet
+  Partition: Record[C]
+  Record count: 1
+  File size: 2416 bytes
+  Spec ID: 1
+
+File: file:///tmp/warehouse/xmen/characters/data/alias=Changeling%3DMorph/00000-1-<uuid-1>.parquet
+  Partition: Record[Changeling=Morph]
+  Record count: 1
+  File size: 2531 bytes
+  Spec ID: 0
+
+================================================================================
+Query Results:
+================================================================================
+   id           name             alias                                        powers  birth_year  active
+0   1  Scott Summers           Cyclops                 Optic blasts, team leadership        1970    True
+1   2   Kevin Sydney  Changeling=Morph  Shapeshifting, Psionic powers, Skilled actor        1968   False
+
+```
+
+Hence the reader understood both partitioning spec and found the correct files to read.
+
+### Example: Tags, branches and time travel
+During the last examples we have seen how Apache Icebergs metadata layer enables multiple features.
+One key insight was, that an Iceberg table not only stores what data currentley makes up a table, but what operations lead to this state, and how previous states looked in the form of snapshots.
+To capitalize on all of this Apache Icebergs give the tools to navigate snapshots in the form of tags, branches and time travel.
+
+As always we start with our base table with 10 X-Men, which is our snapshot `s1`.
+We can now create a tag for this snapshot, where a tag is just a name, to reference a snapshot instead of using it's id:
+```python
+table.manage_snapshots().create_tag(
+    snapshot_id=table.current_snapshot().snapshot_id, tag_name="v1"
+).commit()
+```
+
+In the metadata file this shows up like this:
+```json
+"refs": {
+    "main": {
+      "snapshot-id": s1,
+      "type": "branch"
+    },
+    "v1": {
+      "snapshot-id": s1,
+      "type": "tag"
+    }
+}
+```
+
+Now we can add three more X-Men to create a another snapshot:
+```python
+df = read_csv("./x-men2.csv")
+table.append(df)
+print(len(table.scan().to_arrow()))
+# > 13
+```
+
+Notice now, that in the metadata file there is always a thing called `main` branch.
+This is the current state of the table and we can see that it now points to the latest snapshot, while the tag `v1` still points to the old one:
+
+```json
+"refs": {
+    "main": {
+      "snapshot-id": s2,
+      "type": "branch"
+    },
+    "v1": {
+      "snapshot-id": s1,
+      "type": "tag"
+    },
+}
+```
+Visually we can represent this as
+
+{{ image(src="/images/iceberg/example-snapshot-01.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;height: 300px") }}
+
+But the key idea is, that the old snapshot `s1` still exists.
+By adding new data nothing was overwritten, no information of how we ended up in this state was lost.
+Everything is still there, captured in the hierarchy of metadata files.
+Therefore we can just query an older state of the table if we want to:
+```python
+v1_snapshot_id = table.refs()["v1"].snapshot_id
+print(len(table.scan(snapshot_id=v1_snapshot_id).to_arrow()))
+# > 10
+```
+
+This feature of looking at a previous state of a table goes by the name of time travel.
+Typically this feature is showcased by running a query for a table as it looked like at a specific point in time, e.g.
+```sql
+SELECT count(*) FROM xmen.characters TIMESTAMP AS OF '2026-08-16 22:45:00'
+```
+But note, that this does not magically offer to travel time freely.
+Behind the scenes just the snapshot with a timestamp closest before the given timestamp is selected, [see the offical PyIceberg docs](https://py.iceberg.apache.org/reference/pyiceberg/table/#pyiceberg.table.Table.snapshot_as_of_timestamp):
+
+```python
+def snapshot_as_of_timestamp(self, timestamp_ms: int, inclusive: bool = True) -> Snapshot | None:
+    """Get the snapshot that was current as of or right before the given timestamp, or None if there is no matching snapshot.
+```
+Hence, if your data has some kind of creation time semantics that differ from how you commit new data to the Iceberg table, you may get suprising results.
+
+Anyways, let's now create a new branch.
+In contrast to tags, branches are not bound to a single snapshot, but move.
+When new data is commited to them, and with it a new snapshot created, they automatically update to point to this new snapshot.
+In the end this is just like git branches behaves.
+(And thinking about it, Apache Iceberg in general shares a lot of similarities with git. See here for a [nice git deep dive](https://jwiegley.github.io/git-from-the-bottom-up/).)
+
+We can create a new branch via:
+
+```python
+table.manage_snapshots().create_branch(
+    snapshot_id=table.current_snapshot().snapshot_id, branch_name="dev"
+).commit()
+```
+
+And then only append two more x-men to this branch
+```python
+df = read_csv("./x-men4.csv")
+table.append(df, branch="dev")
+print(len(table.scan().to_arrow()))
+# > 13
+```
+
+What happened now is that a new snapshot was craeted but only the dev branch references it:
+
+```json
+"refs": {
+  "main": {
+    "snapshot-id": s2,
+    "type": "branch"
+  },
+  "v1": {
+    "snapshot-id": s1,
+    "type": "tag"
+  },
+  "dev": {
+    "snapshot-id": s3,
+    "type": "branch"
+  }
+},
+```
+Visually we can represent this as
+{{ image(src="/images/iceberg/example-snapshot-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;height: 300px") }}
+
+This branch feature is perfect for patterns like the [[write-audit-publish]] pattern.
+In this pattern new data is first written, then it is checked if it matches the data quality requirements (audit), and the depending on the output of the audit it is either published, i.e. declared the new state of the table or dismissed.
+In this spirite, Iceberg allows us to query the latest newley written, but yet unpublished data, via
+```python
+dev_snapshot_id = table.refs()["dev"].snapshot_id
+audit_scan = table.scan(snapshot_id=dev_snapshot_id).to_arrow()
+```
+
+on which we could run some data quality checks.
+And if they all passed we could publish them, i.e. set the current snapshot of the table to it using.
+```python
+table.manage_snapshots().set_current_snapshot(ref_name="dev").commit()
+```
+
+Then when simply querying the default state of the table, we now see the full 15 x-men:
+```
+print(len(table.scan().to_arrow()))
+# > 15
+```
+
+Visually we can represent this as
+{{ image(src="/images/iceberg/example-snapshot-03.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;height: 300px") }}
+
+
+### Example: Maintenance
+We have now seen that Apache Iceberg brings many features that systematically improve on weakness of Hive tables.
+But, as always, there is no free lunch.
+To make all these features possible, Iceberg tables must do a lot of heavy lifting.
+Every change of data, be it an append, delete or update, requrires multiple metadata files to be written in addition to the actual data files.
+Also, depending on what write mode is used, much redundant data may be written and stored indefinitely.
+Down the line, just normally using Iceberg tables can lead to shortcomings like wasted storage, reading many small data files or cumbersome scanning through many metadata files.
+To combat this PySpark supplies a set of [maintenance operations](https://iceberg.apache.org/docs/latest/maintenance/).
+
+For this section we will start with the previous example as our baseline, i.e. three snapshots for which we appened first 10, then 3 and then 2 X-Men.
+
+The first thing we can do is reduce the number of metadata files.
+As stated before, one of the big advantage of Iceberg is that it reduces the number of API calls needed for planning a scan by containing multiple file paths in a single manifest file.
+But if we store a single manifest file for each data file this advantage is lost.
+To avoid this we can rewrite manifest files using:
+```python
+spark.sql(""" CALL marvel.system.rewrite_manifests('xmen.characters') """).show()
+```
+
+```
++-------------------------+---------------------+
+|rewritten_manifests_count|added_manifests_count|
++-------------------------+---------------------+
+|                        3|                    1|
++-------------------------+---------------------+
+```
+
+Which leaves us with a single manifest file that references all data files.
+
+TOOD: image here?
+
+The second thing we can do is to combine multiple small data files into bigger ones, a technique called compaction.
+While this does not matter for our toy data set example anyways, for production environments one usually aims for data files of around 512 MB (the default target data file size when compacting).
+This number is not choosen arbitrarily, but is a sweet spot when balancing multiple opposing incentives.
+On one side large files are favored, because:
+ - Each data size contains necessary metadta information, i.e. headers and footers. The large the data file the better (lower) the storage amplification. This means one writes more data the one actually wants to writes, i.e. row groups, compared to what one needs to write, i.e. headers/footers.
+ - As the data files are usually accessed via a network the API call overhead per file can add up. (Same issue as with scan planning). Having bigger and therefore less files reduces this overhead.
+On the other side small files are favored, because:
+ - Each file can be worked on in parallel by a worker of the query engine used. With more smaller files the workload can be better parallelized.
+ - As files are typically processed by workers in memory the content of a file should fit inside the memory of a worker. Due to typical resource allocation in a query engine cluster this poses a limit on how big a file should get.
+Considering these factors, data files around 512 MB have just proven themselves to be efficient in practice for common applications.
+
+To actually compact our data files we can call the following:
+```python
+spark.sql(
+    """ CALL marvel.system.rewrite_data_files(table => 'xmen.characters', options => map('rewrite-all', 'true')) """
+).show()
+```
+
+```
+# +--------------------------+----------------------+---------------------+-----------------------+--------------------------+
+# |rewritten_data_files_count|added_data_files_count|rewritten_bytes_count|failed_data_files_count|removed_delete_files_count|
+# +--------------------------+----------------------+---------------------+-----------------------+--------------------------+
+# |                         3|                     1|                 8131|                      0|                         0|
+# +--------------------------+----------------------+---------------------+-----------------------+--------------------------+
+```
+Which leaves us with a single data file, which also simplifies the latest manifest file.
+
+The last maintenance step I want to show is the expiration of snapshots.
+As almost every operation on an iceberg table creates a new snapshots many manifest list files accumlate over time.
+Depending on the frequency and granularity with which one appends or deletes data from an Iceberg table, keeping all these snaphosts may not be needed and just waste storage.
+Therefore one can simply expire old snapshots and automatically get rid of data and manifest files that are only references in the expired snapshots.
+
+Due to our two previous maintenance operation the current filesystem structure looks as follows:
+
+```
+/tmp/warehouse
+$ tree
+.
+├── pyiceberg_catalog.db
+└── xmen
+    └── characters
+        ├── data
+        │   ├── 00000-0-<uuid-1>.parquet
+        │   ├── 00000-0-<uuid-2>.parquet
+        │   ├── 00000-0-<uuid-3>.parquet
+        │   └── 00000-5-eb8d5a9d-a6d6-48df-ab22-3387a3426791-0-00001.parquet
+        └── metadata
+            ├── 00000-<uuid-a>.metadata.json
+            ├── 00001-<uuid-b>.metadata.json
+            ├── 00002-<uuid-c>.metadata.json
+            ├── 00003-<uuid-d>.metadata.json
+            ├── 00004-<uuid-e>.metadata.json
+            ├── 00005-<uuid-f>.metadata.json
+            ├── 00006-<uuid-g>.metadata.json
+            ├── 00007-<uuid-h>.metadata.json
+            ├── 00008-<uuid-i>.metadata.json
+            ├── <uuid-1>-m0.avro
+            ├── <uuid-2>-m0.avro
+            ├── <uuid-5>-m0.avro
+            ├── <uuid-5>-m1.avro
+            ├── <uuid-3>-m0.avro
+            ├── optimized-m-463ec091-f9ac-4a0f-8a3a-e65617563e55.avro
+            ├── snap-3014518774835702005-1-<uuid-4>.avro
+            ├── snap-4956052972558252728-0-<uuid-3>.avro
+            ├── snap-768964918616401465-1-<uuid-5>.avro
+            ├── snap-8380523983098070968-0-<uuid-2>.avro
+            └── snap-9164814029224031324-0-<uuid-1>.avro
+```
+
+Here we expire all snapshots older than a future date (so all), but want retain atleast one.
+```python
+spark.sql(
+    """ CALL marvel.system.expire_snapshots('xmen.characters', TIMESTAMP '2044-08-18 00:00:00.000', 1); """
+).show()
+```
+The summary gives us information on what data and metadata files could be deleted by expiring snapshots:
+```
++------------------------+-----------------------------------+-----------------------------------+----------------------------+----------------------------+------------------------------+
+|deleted_data_files_count|deleted_position_delete_files_count|deleted_equality_delete_files_count|deleted_manifest_files_count|deleted_manifest_lists_count|deleted_statistics_files_count|
++------------------------+-----------------------------------+-----------------------------------+----------------------------+----------------------------+------------------------------+
+|                       0|                                  0|                                  0|                           1|                           2|                             0|
++------------------------+-----------------------------------+-----------------------------------+----------------------------+----------------------------+------------------------------+
+```
+
+Finally we have the following filesystem structure:
+```
+$ tree
+.
+├── pyiceberg_catalog.db
+└── xmen
+    └── characters
+        ├── data
+        │   ├── 00000-0-<uuid-1>.parquet
+        │   ├── 00000-0-<uuid-2>.parquet
+        │   ├── 00000-0-<uuid-3>.parquet
+        │   └── 00000-5-eb8d5a9d-a6d6-48df-ab22-3387a3426791-0-00001.parquet
+        └── metadata
+            ├── 00000-<uuid-a>.metadata.json
+            ├── 00001-<uuid-b>.metadata.json
+            ├── 00002-<uuid-c>.metadata.json
+            ├── 00003-<uuid-d>.metadata.json
+            ├── 00004-<uuid-e>.metadata.json
+            ├── 00005-<uuid-f>.metadata.json
+            ├── 00006-<uuid-g>.metadata.json
+            ├── 00007-<uuid-h>.metadata.json
+            ├── 00008-<uuid-i>.metadata.json
+            ├── 00009-<uuid-j>.metadata.json
+            ├── <uuid-1>-m0.avro
+            ├── <uuid-2>-m0.avro
+            ├── <uuid-5>-m0.avro
+            ├── <uuid-5>-m1.avro
+            ├── <uuid-3>-m0.avro
+            ├── snap-4956052972558252728-0-<uuid-3>.avro
+            ├── snap-768964918616401465-1-<uuid-5>.avro
+            └── snap-9164814029224031324-0-<uuid-1>.avro
+```
+
+Here we see that actually three snapshots still remain in our iceberg table.
+This is because snapshots with are referenced by tag or branch, in our case the tag `v1` and the branch `dev`, are protected from expiration.
 
 
 
+### Last
+TODO: Highlight that all shortcoming of hive have been covered
 
-## New ideas
+
+#### New ideas
  - While the idea of the spec is nice it seems that not all other programming languages have kept up and the java implementation is the source of Truth, see https://github.com/apache/iceberg-rust/issues/1816.
- - In PyIcerberg it is very simple to just append data. Behind the scenes there it actually a transaction being opened, a arrow table written out to parquet, manifest files written. I should show this, maybe visually.
+ - In PyIceberg it is very simple to just append data. Behind the scenes there it actually a transaction being opened, a arrow table written out to parquet, manifest files written. I should show this, maybe visually.
  - I can use rust and PyIceberg in this blog to show that the spec is language agnostic. This way I can also overcome the issue of some things missing in some implementations and how the difference between the write and read path.
  - write more on how all the stuff that iceberg puts in-between the catalog and the actual data files enables flexibility and real data warehouse capabilities. But it pushes the load to the reader and writers. But with COW vs MOR the read vs write path can be tuned.
  - thing about comparison to traditional data warehouses that have full control. Iceberg is more about openness and interoperability instead of full performance.
@@ -898,69 +1736,7 @@ I probably also can't do this with SQLCatalog as sqlite does not support concurr
 ### 2026-07-01
  - Can I just use the default derby for hive meta store to show what I want to do?
  - How do the compatibilities need to line up work spake, Hadoop, Hive?!
- - See https://medium.com/@malinda.ashan/configure-apache-hive-to-use-postgres-as-metastore-fae1703e29d5
+ s- See https://medium.com/@malinda.ashan/configure-apache-hive-to-use-postgres-as-metastore-fae1703e29d5
  - See here for the configs: https://cwiki.apache.org/confluence/plugins/servlet/mobile?contentId=27362076#content/view/27362076 or check this: https://hive.apache.org/docs/latest/user/configuration-properties/
 
-### 2026-07-04
-done: Turn this into its own section.
-
-Hive findings:
- - There are a lot of table. Most of no interset to me except:
-    - TBLS: seems to contain the tables, but no schema.
-    - TABLE_PARAMS: Continas infos like partition keys and schmea but specific for query engine used.
-    - COLUMNS_V2: Hold the actual schema.
-    - PARTITIONS: One row per partition.
-    - PARTITION_KEYS: contains the partition keys for each table.
-    - SDS: Seems to contain the prefixes for the data location. done: Why named SDS? -> Storage Descriptors.
-
-
-Query to see things together:
-```sql
-SELECT
-    t."TBL_NAME",
-    c."COLUMN_NAME",
-   c."TYPE_NAME"
-FROM public."TBLS" as t
-JOIN public."SDS" s
-    ON t."SD_ID" = s."SD_ID"
-JOIN public."COLUMNS_V2" c
-    ON s."CD_ID" = c."CD_ID" 
-ORDER BY c."INTEGER_IDX" ;
-```
-
-Usefull references:
- - https://analyticsanvil.wordpress.com/2016/08/21/useful-queries-for-the-hive-metastore/
- - https://www.datacadamia.com/_media/db/hive/hive_metastore_er_diagram.png
-
-done: Create small ER Diagram here for the tables used.
-
-The important part is what how a query engine uses the Hive Meta Store.
-Imagine a query that looks like this:
-```sql
-select name, powers
-from xmen
-where birth_year = 1963 
-```
-The query engine can now "ask" the hive metastore on specific things.
-First does the table `xmen` even exist.
-This information is stored in the `TBLS` table.
-Second, does this table contain the asked for columns, `name` and `powers`.
-This information is stored in `COLUMNS_V2`, which is accessible for the specific table via the `SD_ID`, which links to an `CD_ID`.
-(The naming means columnn descriptor aka schema. Schema is linked to storeage descriptors, which would in theory allow different partitions to have different schemas.)
-Then it can check if the predicate filters on a a partitioned column by checking `PARTITION_KEYS` if the table has any partition columns.
-In this case it does, which leads to checking the `PARTITIONS` table to filter only the needed partitions `SD_ID`.
-Finally the `SD_ID`s can be used to look up the location of the partition sin the `SDS` table.
-But note here, that this is only a prefix.
-
-done: Explain the issue of list all files for prefix.
-
-TODO: Move this insight to its correct place.
-One fix for this would be to add antoher table that now stores one row for every file in every partition.
-But then for every write, which could include hundreds of files, many rows must be changed.
-This would introduce a lot more load on the meta store/database.
-Iceberg avoids this by using immutable files, i.e. no need to manipulate metadata. Just write new.
-
-
-## References 
- - https://lakefs.io/blog/metadata-management-hive-metastore-vs-aws-glue/
 
