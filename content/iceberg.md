@@ -35,7 +35,7 @@ This abstraction was necessary to enable querying data stored in open file forma
 Apache Iceberg evolves it by surprisingly reducing the responsibilities of data catalogs.
 Instead it adds another layer of organization to allow for more sophisticated access of files, consistent concurrent writes and reads and feature like time travel, i.e. reading an older state of a table.
 
-This organization layer is completely file based and only requires in-places writes, seek-able reads and deletes.
+This organization layer is completely file based and only requires in-place writes, seek-able reads and deletes.
 This way Apache Iceberg can be used on files systems or object-stores, like s3, for easy durability.
 In spirit of the unbundling, Apache Iceberg does not depend on a single type of open file format to store the actual data, but in theory allows for any format to be used.
 And finally this organization layer can be used with various data catalogs.
@@ -53,7 +53,7 @@ This metadata includes (among other things):
 
 In short, the HMS is a data catalog and the metadata it stores is necessary for a query engine to understand the underlying data source.
 When a query engine receives a SQL query, it accesses the HMS to check if the referenced tables even exits, if the selected columns are present, if the expected data types align and if it can use optimizations like partition pruning.
-Finally the HMS is needed to actual know where the required data of a table can be found by using the stored location metadata.
+Finally the HMS is needed to actually know where the required data of a table can be found by using the stored location metadata.
 
 ### Hive demonstration
 Now for a quick demonstration how this looks in practice.
@@ -63,7 +63,7 @@ The code to run this yourself can be found [here](https://github.com/Stefan-Dien
 {{ image(src="/images/iceberg/hms-setup.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 650px") }}
 
 
-When all of this is running, we create a table for a small toy dataset of the Marvel X-Men (which we will use through the whole blog), using the following schema:
+When all of this is running, we create a table for a small toy dataset of the Marvel X-Men (which we will use throughout the whole blog), using the following schema:
 ```python
 spark.sql("""
 CREATE TABLE IF NOT EXISTS xmen (
@@ -109,7 +109,7 @@ But what happened in the HMS?
 To understand this we can access the underlying PostgreSQL, e.g. using [DBeaver](https://dbeaver.io/).
 Here we are overwhelmed with many tables, you can see a full overview of the HMS database entity relationship diagram [here](https://analyticsanvil.wordpress.com/wp-content/uploads/2016/08/hive_metastore_database_diagram.png).
 For a basic understanding the following tables are most important (note that I omit a lot of columns for readability):
- - **`TBLS`**: This holds all the tables that have been registered with the HMS. In our case as we jus created a single table it holds the single record:
+ - **`TBLS`**: This holds all the tables that have been registered with the HMS. In our case as we just created a single table it holds the single record:
 
 |TBL_ID|SD_ID|TBL_NAME|
 |------|-----|--------|
@@ -629,7 +629,7 @@ But in contrast, the now active manifest list file does not only point to one ma
 {{ image(src="/images/iceberg/example-append-02.png", alt="", style="border-radius: 0px; float: center; padding: 10px; margin: 10px 0 10px 20px;width: 550px") }}
 
 The idea stays the same: A reader loads the manifest file and traverses all child manifest files and associated data files to get the current state of the table.
-Why it may seem wasteful that a simple append produces that many files, this wastefulness is exactly what gives Apache Iceberg its powers.
+While it may seem wasteful that a simple append produces that many files, this wastefulness is exactly what gives Apache Iceberg its powers.
 Because now we not only see the current state of the table, but have the information what operations where done in what order to get to this state, see for example what the snapshot list of the metadata file `00002-<uuid-c>.metadata.json` looks like:
 ```json
 "snapshots": [
@@ -812,7 +812,7 @@ A new version of the specification is introduced when features are added that wo
 When writing this blog post v1, v2 and v3 have been released, while v4 is in active development.
 The most confusing part for versions is that there is a heavy discrepancy on feature implementation status between the different implementations.
 The status can be compared [here](https://iceberg.apache.org/status/), where the Java implementation is always the most complete one and [leads direction](https://github.com/apache/iceberg-rust/issues/1816).
-But others like PyIceberg are trying to keep up, see for example there [progress on implementing all features for v3](https://github.com/apache/iceberg-python/issues/1818).
+But others like PyIceberg are trying to keep up, see for example their [progress on implementing all features for v3](https://github.com/apache/iceberg-python/issues/1818).
 
 To showcase this let's do another example for deletion vectors and rewind time again!
 When we started out creating our `xmen` table the version defaulted to v2, because we used PyIceberg for it.
@@ -1189,7 +1189,7 @@ $ tree
             ├── <uuid-1>-m0.avro
             └── snap-<id-1>-0-<uuid-1>.avro
 ```
-The special characters are safley encoded: `/` -> `%2F` and `=` -> `%3D`.
+The special characters are safely encoded: `/` -> `%2F` and `=` -> `%3D`.
 
 This is nice, but the far bigger feature is that Iceberg actually decouples the partitioning of a table from its physical layout, which solves the second downside.
 When we created the table the information of the partition spec is stored in the metadata file:
