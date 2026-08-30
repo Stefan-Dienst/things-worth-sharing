@@ -10,7 +10,28 @@ I have tried to understand it multiple times, but it always felt hard to get int
 When searching for references it often feels more like reading an advertisement with features like: ACID for open file formats, schema evolution and time travel. 
 But even after using Apache Iceberg, I did not grok it before doing practical experiments and sitting down to read the [official specification](https://iceberg.apache.org/spec/) thrice.
 This post fills the gap of high-level overview and implementation and walks you through the most important features of Apache Iceberg by example, showing you how they work and why they are actually such an huge improvement over Hive tables.
-Note: This post is long.
+
+Warning: This post is long and it could take you up to an hour to read it completely.
+
+### Table of Contents
+- [Apache Iceberg in a nutshell](#apache-iceberg-in-a-nutshell)
+- [The old Hive way](#the-old-hive-way)
+  - [Hive demonstration](#hive-demonstration)
+  - [Other shortcomings](#other-shortcomings)
+- [Core ideas](#core-ideas)
+  - [The data layer](#the-data-layer)
+  - [The metadata layer](#the-metadata-layer)
+  - [The data catalog layer](#the-data-catalog-layer)
+- [Examples](#examples)
+  - [Create an Iceberg table and show file structure](#example-create-an-iceberg-table-and-show-file-structure)
+  - [Append more X-Men](#example-append-more-x-men)
+  - [Delete an X-Man](#example-delete-an-x-man)
+  - [Update an X-Man](#example-update-an-x-man)
+  - [Schema evolution](#example-schema-evolution)
+  - [Partitioning](#example-partitioning)
+  - [Tags, branches and time travel](#example-tags-branches-and-time-travel)
+  - [Maintenance](#example-maintenance)
+- [Closing](#closing)
 
 ## Apache Iceberg in a nutshell
 In its essence Apache Iceberg is a specification of a table format.
