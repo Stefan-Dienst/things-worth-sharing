@@ -20,6 +20,8 @@ I have read, viewed and studied some resources and tried various approaches and 
 In the following, I present some of my key findings that I believe have been the most important in improving my way of learning.
 Note that all of this is non-scientific, highly opinionated and just a snapshot of my current thinking.
 
+<!-- more -->
+
 ## You will forget things, get used to it
 Our brain is not meant for endless storing and exact retrieval of knowledge[^1]. 
 Accept this. 

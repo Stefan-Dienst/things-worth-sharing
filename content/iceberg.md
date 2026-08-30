@@ -3,8 +3,6 @@ title = "Grokking Apache Iceberg"
 date = 2026-09-01
 +++
 
-
-## Intro
 Do you understand how Apache Iceberg actually works?
 I have tried to understand it multiple times, but it always felt hard to get into compared to basic Hive tables. 
 When searching for references it often feels more like reading an advertisement with features like: ACID for open file formats, schema evolution and time travel. 
@@ -12,6 +10,8 @@ But even after using Apache Iceberg, I did not grok it before doing practical ex
 This post fills the gap of high-level overview and implementation and walks you through the most important features of Apache Iceberg by example, showing you how they work and why they are actually such an huge improvement over Hive tables.
 
 Warning: This post is long and it could take you up to an hour to read it completely.
+
+<!-- more -->
 
 ### Table of Contents
 - [Apache Iceberg in a nutshell](#apache-iceberg-in-a-nutshell)

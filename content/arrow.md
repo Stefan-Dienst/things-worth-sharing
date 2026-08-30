@@ -16,6 +16,8 @@ This blog post aims to fill this gap.
 I will cover the concepts that are needed to not just believe that a standardized columnar memory layout makes sense, but to actually get that its creation was inevitable.
 But note, that I am not an expert on these topics and I will omit details for readability. To get the full picture please refer to the [specifications](https://arrow.apache.org/docs/format/index.html).
 
+<!-- more -->
+
 ## What actually is Apache Arrow?
 For me, things that are not just installable libraries or frameworks are always harder to grasp.
 Apache Arrow is just like this, and in addition consists of many different parts.

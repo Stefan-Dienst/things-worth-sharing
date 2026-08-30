@@ -12,7 +12,9 @@ But maybe it helps someone like me who is lost and googling error messages.
 Before describing my journey I want to point out a few guides, with which I would not have been able to get it done:
  - [A guide that describes the process for the same machine I used but for a Windows VM](https://forum.proxmox.com/threads/guide-ryzen-5800h-igpu-passthrough-hdmi-windows11-htpc.153405/): This guide saved me. Before I found it I was close to giving up. So big shout outs.
  - [Comprehensive guide for Ryzen 7000 series GPU passthrough](https://github.com/isc30/ryzen-7000-series-proxmox/?tab=readme-ov-file#proxmox---ryzen-7000-series---amd-radeon-680m780mrdna2rdna3-gpu-passthrough): The guide above used this one for many steps.
- - [GPU passthrough to an Ubuntu VM, but with a NVIDIA GPU](https://nopresearcher.github.io/Proxmox-GPU-Passthrough-Ubuntu/): This was the first guide I started with and it got me on track. Unfortunately it did not work out of the box for me. (Probably because I also have a different GPU setup.) 
+ - [GPU passthrough to an Ubuntu VM, but with a NVIDIA GPU](https://nopresearcher.github.io/Proxmox-GPU-Passthrough-Ubuntu/): This was the first guide I started with and it got me on track. Unfortunately it did not work out of the box for me. (Probably because I also have a different GPU setup.)
+
+<!-- more -->
 
 # My journey
 After I ran head first into following a guide and not getting results I decided to take a step back and first gather more information on what a GPU passthrough even is.
