@@ -1,0 +1,14 @@
+{% extends "terminimal/templates/archive.html" %}
+
+{% block content %}
+    <div class="post">
+        <h1 class="post-title">{{ page.title }}</h1>
+
+        {% set section = get_section(path="_index.md") %}
+
+        {# Sort pages by date in descending order (newest first) #}
+        {% set sorted_pages = section.pages | sort(attribute="date") | reverse %}
+
+        {{ post_macros::list_posts(pages=sorted_pages) }}
+    </div>
+{% endblock content %}
