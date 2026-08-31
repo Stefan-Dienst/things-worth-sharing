@@ -1675,7 +1675,7 @@ Here we see that actually three snapshots still remain in our iceberg table.
 This is because snapshots, which are referenced by tag or branch, in our case the tag `v1` and the branch `dev`, are protected from expiration.
 
 ## Closing
-We covered a lot of ground and covered the most important features of Apache Iceberg from the ground up.
+We touched on many subjects and covered the most important features of Apache Iceberg from the ground up.
 I hope reading this post lifted some mysteries of Apache Iceberg for you.
 In writing this I sure learned a lot!
 If you want to dig deeper and see everything Apache Iceberg has to offer, there is not better place than the [official specification](https://iceberg.apache.org/spec/).
