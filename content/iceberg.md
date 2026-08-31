@@ -1,6 +1,6 @@
 +++
 title = "Grokking Apache Iceberg"
-date = 2026-09-01
+date = 2026-08-31
 +++
 
 Do you understand how Apache Iceberg actually works?
