@@ -1,24 +1,50 @@
 /* Mobile-friendly improvements for tables, code blocks, and images */
 
-/* Tables: Add horizontal scrolling on mobile */
+/* Tables: Scrolling with proper alignment */
 @media (max-width: 683px) {
-  /* Wrap tables in a scrollable container */
+  /* Wrapper is block for overflow */
   .post-content table,
   .post table {
     display: block;
     max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    margin: 20px 0;
   }
 
-  /* Allow table content to determine width, but contained within scrollable area */
-  .post-content table tbody,
-  .post-content table thead,
-  .post table tbody,
-  .post table thead {
+  /* But keep table parts as table to maintain alignment */
+  .post-content table > thead,
+  .post-content table > tbody,
+  .post-content table > tfoot,
+  .post table > thead,
+  .post table > tbody,
+  .post table > tfoot {
+    display: table-header-group;
+  }
+
+  .post-content table > tbody,
+  .post table > tbody {
+    display: table-row-group;
+  }
+
+  /* Ensure rows and cells render normally */
+  .post-content table tr,
+  .post table tr {
+    display: table-row;
+  }
+
+  .post-content table th,
+  .post-content table td,
+  .post table th,
+  .post table td {
+    display: table-cell;
+  }
+
+  /* Create internal table to hold structure */
+  .post-content table::before,
+  .post table::before {
+    content: '';
     display: table;
-    width: auto;
+    width: max-content;
     min-width: 100%;
   }
 }
