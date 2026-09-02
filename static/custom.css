@@ -2,17 +2,24 @@
 
 /* Tables: Add horizontal scrolling on mobile */
 @media (max-width: 683px) {
-  table {
+  /* Wrap tables in a scrollable container */
+  .post-content table,
+  .post table {
     display: block;
+    max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     margin: 20px 0;
   }
 
-  /* Prevent table from breaking layout */
-  .post-content table {
+  /* Allow table content to determine width, but contained within scrollable area */
+  .post-content table tbody,
+  .post-content table thead,
+  .post table tbody,
+  .post table thead {
+    display: table;
+    width: auto;
     min-width: 100%;
-    width: max-content;
   }
 }
 
