@@ -46,6 +46,20 @@ img {
   height: auto;
 }
 
+/* Make images clickable */
+.post-content img,
+.post img,
+figure img {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.post-content img:hover,
+.post img:hover,
+figure img:hover {
+  opacity: 0.85;
+}
+
 /* Prevent images from breaking out of containers on mobile */
 @media (max-width: 683px) {
   .post-content img,
@@ -65,5 +79,87 @@ img {
   figure img {
     max-width: 100%;
     height: auto;
+  }
+}
+
+/* Image zoom overlay */
+.zoom-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zoom-overlay.active {
+  display: flex;
+  opacity: 1;
+}
+
+.zoom-container {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px 20px 20px;
+}
+
+.zoom-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  touch-action: pinch-zoom;
+}
+
+.zoom-close {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  color: #fff;
+  font-size: 40px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 10000;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.2s;
+  background: rgba(0, 0, 0, 0.5);
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.zoom-close:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 683px) {
+  .zoom-container {
+    padding: 60px 10px 10px 10px;
+  }
+
+  .zoom-close {
+    top: 10px;
+    right: 10px;
+    font-size: 30px;
+    width: 45px;
+    height: 45px;
+  }
+
+  .zoom-image {
+    width: 100%;
+    max-width: none;
   }
 }
